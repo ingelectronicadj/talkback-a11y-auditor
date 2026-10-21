@@ -1,0 +1,29 @@
+# Python bytecode & entornos virtuales
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Binario OCR compilado localmente (se recompila con swiftc en macOS)
+tb_ocr
+*.dSYM/
+
+# Configuración local y secretos (nunca versionar)
+.env
+.env.*
+config.local.json
+*.local.json
+crypto_sso_helper.py
+
+# Reportes y capturas generadas en ejecuciones
+reportes/
+talkback_report_*/
+*.png
+
+# Sistema operativo / IDE
+.DS_Store
+.idea/
+.vscode/
+*.zip

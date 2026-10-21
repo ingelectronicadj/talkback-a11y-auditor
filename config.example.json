@@ -1,0 +1,22 @@
+{
+  "device": "emulator-5554",
+  "app_pkg": "com.example.myapp",
+  "i18n_db_name": "",
+  "keep_alive_sec": 0,
+  "adb_timeout": 25,
+  "login_url": "",
+  "sso_url": "",
+  "sso_token": "",
+  "login_body": {},
+  "sso_body": {},
+  "jira_base_url": "https://your-org.atlassian.net",
+  "jira_bugs": [],
+  "views": {
+    "home": {
+      "title": "Home Screen",
+      "short_title": "Home",
+      "steps": 50,
+      "out": "reportes/home"
+    }
+  }
+}
