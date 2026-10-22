@@ -83,7 +83,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 | `--list-apps` | Lista todas las apps de usuario instaladas en el emulador y marca cuál está activa en pantalla | - |
 | `--apk APK_FILE` | Instala un archivo `.apk` en el emulador, extrae su `packageName` y lo abre para auditarlo | - |
 | `--init` | Asistente interactivo para elegir una app instalada o instalar un `.apk` y guardar `config.local.json` | - |
-| `--profile NAME`, `-p` | Carga el perfil `profiles/<NAME>.local.json` (ej. `--profile crypto_arg`) | Auto |
+| `--profile NAME`, `-p` | Carga el perfil `profiles/<NAME>.local.json` (ej. `--profile app_staging`) | Auto |
 | `--pkg PACKAGE` | Paquete Android de la aplicación bajo prueba (si se omite, detecta la app en primer plano) | Auto / Config |
 | `--locale BCP47` | Cambia automáticamente el idioma del emulador y reinicia TalkBack antes de auditar (ej. `es-AR`, `en-US`) | Según perfil |
 | `--view VIEW_ID` | Ejecuta el perfil declarativo de una vista (`config['views'][VIEW_ID]`) o `all` para correr todas en secuencia | - |

@@ -113,7 +113,7 @@ def text_a11y_issues(text, expected_locale="es"):
         )
     elif not exp_en and re.search(
         r"associated account|available balance|you can change the associated account|"
-        r"select your linked account|select a cryptocurrency|choose one account|"
+        r"select your linked account|select an option|choose one account|"
         r"select the amount|change frequency|you can only select a",
         low,
     ):
@@ -391,21 +391,20 @@ def analyze_unreachable_elements(dom_snapshot, steps):
         if not s.get("in_overlay")
     )
 
-    # 1. Verificar filas de listas repetidas (ej. last-movements-widget-item0, 1, 2)
-    #    donde TalkBack lee solo '2 de 3' / '3 de 3' omitiendo el par de activos
+    # 1. Verificar filas de listas repetidas donde TalkBack lee solo '2 de 3' / '3 de 3' omitiendo la etiqueta principal
     for s in steps:
         u = (s.get("utterance") or "").strip()
         if re.match(r"^[2-9]\s*(?:de|of)\s*\d+\s*$", u, re.I):
             msg = (
-                "Contenido omitido por el lector (WCAG 1.3.1): en el ítem de lista «%s» TalkBack omitió la etiqueta del par de activos (ej. 'ARS a Bitcoin')"
+                "Contenido omitido por el lector (WCAG 1.3.1): en el ítem de lista «%s» TalkBack omitió la etiqueta descriptiva de la fila"
                 % u
             )
             step_issues.append((s["i"], msg))
             omitted.append({
-                "selector": 'li[data-testid^="last-movements-widget-item"] > span[data-testid="screen-reader"]',
+                "selector": 'li[role="listitem"] > span[data-testid="screen-reader"]',
                 "tag": "span",
-                "label": "Etiqueta de par de operación en fila %s" % u,
-                "reason": "Omitido por TalkBack en filas 2..N ( anuncia únicamente '%s')" % u,
+                "label": "Etiqueta descriptiva en fila %s" % u,
+                "reason": "Omitido por TalkBack en filas 2..N (anuncia únicamente '%s')" % u,
                 "step": s["i"],
             })
 

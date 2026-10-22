@@ -273,7 +273,7 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
             and utt
             and utt not in tested_modals
             and re.search(
-                r"(m[aá]s informaci[oó]n sobre|more information on|select your linked account|eleg[ií] qu[eé] cripto|choose a cryptocurrency|order type|tipo de orden)",
+                r"(m[aá]s informaci[oó]n sobre|more information on|select your linked account|eleg[ií] qu[eé]|choose a |order type|tipo de orden)",
                 utt.lower(),
             )
         ):
@@ -374,21 +374,21 @@ def run_self_test():
         {
             "i": 1, "png": "img/step_001.png", "node": None,
             "utterance": "Siguiente", "raw_caption": "Siguiente",
-            "page_title": "Compra de criptomonedas", "is_skeleton": False,
+            "page_title": "Transferencias", "is_skeleton": False,
             "box": (100, 200, 300, 260), "in_overlay": False, "label": "Siguiente",
             "screen_change": False,
         },
         {
             "i": 2, "png": "img/step_002.png", "node": None,
             "utterance": "", "raw_caption": "TalkBack menu. Button",
-            "page_title": "Elegí con qué cuenta querés comprar tus criptos",
+            "page_title": "Elegí con qué cuenta querés operar",
             "is_skeleton": True, "box": None, "in_overlay": True, "label": "",
             "screen_change": True,
         },
         {
             "i": 3, "png": "img/step_003.png", "node": None,
             "utterance": "1 replaced 0 · Siguiente", "raw_caption": "1 replaced 0 · Siguiente",
-            "page_title": "Compra de criptomonedas", "is_skeleton": False,
+            "page_title": "Transferencias", "is_skeleton": False,
             "box": None, "in_overlay": False, "label": "", "screen_change": True,
         },
     ]
@@ -490,7 +490,7 @@ def main():
         "--profile",
         "-p",
         metavar="NAME",
-        help="nombre del perfil en profiles/<NAME>.local.json (ej. crypto_arg, crypto_producto_qa)",
+        help="nombre del perfil en profiles/<NAME>.local.json (ej. app_staging, app_qa)",
     )
     ap.add_argument("--config", metavar="FILE", help="archivo JSON de configuración opcional")
     ap.add_argument("--self-test", action="store_true", help="ejecuta autovalidación interna sin emulador y sale")
@@ -500,7 +500,7 @@ def main():
     ap.add_argument(
         "--view",
         metavar="VIEW_ID",
-        help="ID de vista declarada en config['views'] (ej. landing, product_bitcoin, buy_bitcoin_step1, o 'all' para ejecutar todas)",
+        help="ID de vista declarada en config['views'] (ej. home, detail, checkout, o 'all' para ejecutar todas)",
     )
     ap.add_argument("--view-title", metavar="TITLE", help="título descriptivo de la vista para la cabecera y pestaña del reporte")
     ap.add_argument("--steps", type=int, default=None, help="máx. de avances de foco (default 80 o según --view)")

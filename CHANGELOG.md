@@ -28,7 +28,7 @@ Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibil
   - `AdbClient.ensure_locale(target_locale)` verifica el idioma activo de Android (`persist.sys.locale`) y, si difiere del idioma de la app bajo prueba (ej. `en-US` vs `es-AR`), reordena automáticamente el idioma preferido #1 en `LOCALE_SETTINGS` y reinicia TalkBack para limpiar la caché de roles de accesibilidad de Chromium (`heading 1` / `Button` / `link` vs `encabezado 1` / `Botón` / `vínculo`).
 - **Selección de socket CDP por PID de la app activa y filtrado de WebViews de analítica (`tb_audit/cdp.py`)**:
   - Cuando coexisten varias aplicaciones con WebViews abiertos en el emulador, `_connect_cdp_ws` resuelve el `PID` del paquete en primer plano (`pidof <fg_pkg>`).
-  - Filtra automáticamente WebViews secundarios en segundo plano (como contenedores de telemetría/tag managers `tiqcdn.com` o `about:blank`) para conectarse siempre al WebView real de la vista.
+  - Filtra automáticamente WebViews secundarios en segundo plano (como contenedores de telemetría/tag managers `utag/` o `about:blank`) para conectarse siempre al WebView real de la vista.
 - **Priorización de diccionarios `IndexedDB` de dominio y auditoría cruzada `en` <-> `es` (`tb_audit/cdp.py`)**:
   - Prioriza almacenes de traducciones de dominio (`> 30 keys`) sobre almacenes de configuración cortos (`CONFIG`) y detecta tanto textos en inglés sin localizar dentro de paquetes `es-*` como textos en español olvidados dentro de paquetes `en-*`.
 - **Reglas y automatismos bilingües `es` / `en` (`tb_audit/rules.py`, `talkback_audit.py`)**:

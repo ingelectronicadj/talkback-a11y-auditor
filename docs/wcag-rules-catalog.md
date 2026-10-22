@@ -8,7 +8,7 @@
 
 | ID Regla | Criterio WCAG 2.2 | Nivel | Severidad | Qué detecta |
 |---|---|---|---|---|
-| `TB-I18N-001` | `3.1.2` Idioma de las partes / `2.4.6` | AA | Alta | Keys de traducción crudas sin resolver (`a11y_*`, `mb_mc_*`), textos en inglés dentro de vistas en español (o viceversa), placeholders sin interpolar (`{variable}`) o errores de tilde/voseo. |
+| `TB-I18N-001` | `3.1.2` Idioma de las partes / `2.4.6` | AA | Alta | Keys de traducción crudas sin resolver (`a11y_*`, `i18n_*`), textos en inglés dentro de vistas en español (o viceversa), placeholders sin interpolar (`{variable}`) o errores de tilde/voseo. |
 | `TB-LINK-001` | `2.4.4` Propósito de los enlaces | A | Alta | Enlaces sin texto de destino (anuncian solo `«(Abrir una nueva ventana). vínculo»`) o que duplican su etiqueta (`«Saber más. Saber más...»`) por autorreferencia en `aria-labelledby`. |
 | `TB-SKEL-001` | `4.1.3` Mensajes de estado / `2.4.3` | AA | Alta | Pantallas o drawers en estado de carga con *skeletons* que no anuncian `«Cargando {título}»`, pierden el foco hacia el overlay de TalkBack o dejan nodos `role="status"` vacíos (`«status»`). |
 | `TB-CHART-001` | `2.4.1` Evitar bloques | A | Alta | Gráficas interactivas (`<svg>`) cuyos puntos individuales (`<circle>`) tienen `tabindex="0"` y obligan al usuario de TalkBack a hacer decenas o cientos de swipes para cruzar la gráfica. |
@@ -52,7 +52,7 @@
   ```kotlin
   Row(
       modifier = Modifier.semantics(mergeDescendants = true) {
-          contentDescription = "Orden 1 de 3: ARS a Bitcoin, 24/09/2026, +0.01166 BTC, -1.527.042,80 pesos argentinos"
+          contentDescription = "Orden 1 de 3: Compra, 24/09/2026, -1.527.042,80 pesos argentinos"
       }
   ) { /* ... */ }
   ```

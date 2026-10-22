@@ -88,8 +88,8 @@ DOM_EXTRACT_JS = r"""
   try {
     const dbs = (await indexedDB.databases?.()) || [];
     const dbNames = dbs.map(d => d.name).filter(Boolean);
-    // Priorizar bases de datos de dominio/microfrontend sobre CONFIG genérico
-    dbNames.sort((a, b) => (a === 'CONFIG' ? 1 : b === 'CONFIG' ? -1 : a.includes('CRYPTO') ? -1 : 0));
+    // Priorizar bases de datos de dominio/microfrontend (con guión bajo) sobre CONFIG o WEB genérico
+    dbNames.sort((a, b) => (a === 'CONFIG' ? 1 : b === 'CONFIG' ? -1 : a.includes('_') && !b.includes('_') ? -1 : 0));
     for (const dbName of dbNames) {
       const db = await new Promise((res, rej) => {
         const req = indexedDB.open(dbName);
@@ -163,7 +163,7 @@ DOM_EXTRACT_JS = r"""
     if (!cand) {
       return null;
     }
-    if (/^(a11y_|i18n_|mb_mc_)[a-z0-9_]+$/i.test(cand)) {
+    if (/^(a11y_|i18n_|msg_)[a-z0-9_]+$/i.test(cand) || /^[a-z0-9]{2,8}(_[a-z0-9]+){3,}$/i.test(cand)) {
       const inDict = Object.prototype.hasOwnProperty.call(entries, cand);
       return {
         key: cand,
@@ -290,10 +290,10 @@ def _connect_cdp_ws(adb_client, port=9222):
     chosen = pages[0]
     for p in pages:
         u = (p.get("url") or "").lower()
-        if ("hybrid/" in u or "crypto" in u) and "tiqcdn" not in u:
+        if ("hybrid/" in u or "file://" in u) and not any(t in u for t in ("utag/", "analytics", "about:blank")):
             chosen = p
             break
-        if u and "tiqcdn" not in u and u != "about:blank":
+        if u and not any(t in u for t in ("utag/", "analytics", "about:blank")):
             chosen = p
     ws_url = chosen.get("webSocketDebuggerUrl", "")
     if not ws_url:

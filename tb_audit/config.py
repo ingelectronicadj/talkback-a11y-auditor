@@ -94,7 +94,7 @@ def _deep_merge(base, override):
 
 
 def resolve_profile_path(profile_or_path=None):
-    """Resuelve un nombre de perfil (ej. 'crypto_arg' -> 'profiles/crypto_arg.local.json')
+    """Resuelve un nombre de perfil (ej. 'app_staging' -> 'profiles/app_staging.local.json')
     o ruta de configuración explícita."""
     if profile_or_path:
         if os.path.exists(profile_or_path):

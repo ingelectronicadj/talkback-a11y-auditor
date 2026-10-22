@@ -355,11 +355,11 @@ def _resolve_view_info(steps, dom_snapshot, view_info=None):
     scope_tag = vi.get("scope_tag") or ""
     if not scope_tag:
         r_low = (route + " " + h1_txt).lower()
-        if "/buy" in r_low or "compra" in r_low:
+        if "/buy" in r_low or "compra" in r_low or "checkout" in r_low:
             scope_tag = "Buy Flow"
-        elif "/product-page" in r_low or "btc" in r_low or "bitcoin" in r_low:
+        elif "/product" in r_low or "/detail" in r_low:
             scope_tag = "Product Page"
-        elif "/landing" in r_low or "criptomonedas" in r_low:
+        elif "/landing" in r_low or "/home" in r_low:
             scope_tag = "Landing Page"
     title = vi.get("title") or ""
     if not title:
