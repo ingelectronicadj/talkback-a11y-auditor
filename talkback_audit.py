@@ -25,7 +25,7 @@ from tb_audit import VERSION
 from tb_audit.adb_client import AdbClient
 from tb_audit.cdp import capture_webview_dom, match_dom_element, run_cdp_steps
 from tb_audit.config import LOCAL_CONFIG_PATH, load_config
-from tb_audit.report import build_report, rebuild_report
+from tb_audit.report import build_report, build_suite_index, rebuild_report
 from tb_audit.rules import (
     analyze_sequence_issues,
     is_a11y_relevant,
@@ -173,7 +173,11 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
     steps, prev_sig, repeats, visited, seen_utts = [], None, 0, set(), set()
     prev_screen = None
     chart_streak = 0
-    for i in range(1, args.steps + 1):
+    tested_modals = set()
+    step_num = 0
+    for _ in range(1, args.steps + 1):
+        step_num += 1
+        i = step_num
         adb_client.nav(args.mode, args.backward)
         time.sleep(args.delay)
         adb_client.close_keyboard()
@@ -260,6 +264,61 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
             "screen_change": change,
         })
         print("      %3d. %-52s | dice: %s" % (i, lbl[:50] or "?", (utt or "")[:60]))
+
+        # Prueba automática de Retorno de Foco en modales/drawers (--test-modals):
+        # Si enfocamos un botón disparador de modal/drawer informativo o selector y aún no se probó,
+        # lo activamos con doble tap, capturamos la modal abierta, la cerramos y registramos dónde cae el foco.
+        if (
+            getattr(args, "test_modals", False)
+            and utt
+            and utt not in tested_modals
+            and re.search(
+                r"(m[aá]s informaci[oó]n sobre|more information on|select your linked account|eleg[ií] qu[eé] cripto|choose a cryptocurrency|order type|tipo de orden)",
+                utt.lower(),
+            )
+        ):
+            tested_modals.add(utt)
+            print("      [test-modals] abriendo modal/drawer desde '%s' para validar Focus Return..." % utt[:45])
+            adb_client.emu_double_tap()
+            time.sleep(2.0)
+            step_num += 1
+            m_png = os.path.join(out_dir, "img", "step_%03d.png" % step_num)
+            adb_client.screencap_png(m_png)
+            m_info = (
+                ocr_step_info(ocr_bin, m_png, bar_y)
+                if ocr_bin
+                else {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
+            )
+            m_utt = m_info["utterance"] or m_info["page_title"] or "Modal / Drawer"
+            steps.append({
+                "i": step_num,
+                "png": m_png,
+                "node": None,
+                "utterance": m_utt,
+                "raw_caption": m_info["raw_caption"],
+                "page_title": m_info["page_title"],
+                "is_skeleton": m_info["is_skeleton"],
+                "box": None,
+                "in_overlay": False,
+                "label": m_info["page_title"] or "Modal / Drawer",
+                "screen_change": True,
+                "is_modal": True,
+            })
+            print("      %3d. %-52s | dice: %s [MODAL]" % (step_num, (m_info["page_title"] or "Modal")[:50], m_utt[:55]))
+            # Cerrar modal por botón Cerrar/Close en CDP o tecla Back
+            try:
+                run_cdp_steps(
+                    adb_client,
+                    [
+                        {
+                            "click": 'button[aria-label="Cerrar"],button[aria-label="Close"],button[data-testid*="close"]',
+                            "wait_sec": 1.4,
+                        }
+                    ],
+                )
+            except Exception:
+                adb_client.run(["shell", "input", "keyevent", "4"], check=False)
+                time.sleep(1.4)
 
         # Si enfocamos el botón "Siguiente consejo" / "Next tip" de un carrusel y no está inhabilitado,
         # lo activamos con doble tap y retrocedemos 5 elementos por swipe para leer la nueva tarjeta.
@@ -496,6 +555,19 @@ def main():
     ap.add_argument("--setup-only", action="store_true", help="solo configura TalkBack y sale")
     ap.add_argument("--no-setup", action="store_true", help="no tocar TalkBack ni reenfocar la app")
     ap.add_argument("--stop-talkback", action="store_true", help="apaga TalkBack al terminar")
+    ap.add_argument(
+        "--test-modals",
+        action="store_true",
+        help="en modo automático, abre y cierra modales/drawers detectados para validar Focus Return (TB-FOCUS-001)",
+    )
+    ap.add_argument(
+        "--pack",
+        nargs="?",
+        const="auto",
+        default=None,
+        metavar="ZIP_FILE",
+        help="genera index.html maestro y empaqueta los reportes de la suite en un archivo .zip autocontenido",
+    )
     ap.add_argument("--rebuild", metavar="DIR", help="regenera report.html de una corrida previa (re-OCR capturas)")
     args = ap.parse_args()
 
@@ -596,6 +668,7 @@ def main():
         return
 
     ocr_bin = None if args.no_ocr else ensure_ocr_binary()
+    completed_dirs = []
 
     for v_id in view_queue:
         v_spec = views_cfg.get(v_id, {}) if v_id else {}
@@ -713,7 +786,29 @@ def main():
         path = build_report(
             steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg
         )
+        completed_dirs.append(cur_out)
         print("Reporte: %s" % path)
+
+    if len(completed_dirs) > 1 or args.pack:
+        suite_dirs = completed_dirs
+        if len(suite_dirs) <= 1 and views_cfg:
+            suite_dirs = [
+                v.get("out")
+                for v in views_cfg.values()
+                if v.get("out") and os.path.exists(os.path.join(v["out"], "report.html"))
+            ] or completed_dirs
+        zip_target = None
+        if args.pack:
+            zip_target = (
+                os.path.join("reportes", "reportes_talkback_suite_v%s.zip" % VERSION)
+                if args.pack == "auto"
+                else args.pack
+            )
+        idx_p, zip_p = build_suite_index(suite_dirs, zip_path=zip_target)
+        if idx_p:
+            print("Portada maestra: %s" % idx_p)
+        if zip_p:
+            print("Paquete ZIP:     %s" % zip_p)
 
     if args.stop_talkback:
         adb_client.talkback_off()

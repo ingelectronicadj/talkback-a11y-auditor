@@ -267,7 +267,7 @@ def analyze_sequence_issues(steps):
                 or (len(nu) > 16 and nu[:12] == prev_norm[:12])
             )
         )
-        is_modal_now = any(
+        is_modal_now = bool(s.get("is_modal")) or any(
             re.search(p, (utt + " " + lbl + " " + ptitle).lower())
             for p in MODAL_PATTERNS
         )
@@ -287,3 +287,160 @@ def analyze_sequence_issues(steps):
             pre_modal_step = s["i"]
         if nu:
             prev_norm = nu
+
+
+def analyze_heading_hierarchy(dom_snapshot, steps):
+    """Extrae el mapa jerárquico de encabezados (H1-H6) y detecta saltos de nivel,
+    ausencia de H1 o encabezados ocultos excesivamente largos (TB-HEAD-002)."""
+    headings = []
+    issues = []
+    els = (dom_snapshot or {}).get("elements") if isinstance(dom_snapshot, dict) else None
+    if els:
+        for el in els:
+            tag = (el.get("tag") or "").lower()
+            role = (el.get("role") or "").lower()
+            lvl = None
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                lvl = int(tag[1])
+            elif role == "heading":
+                m = re.search(r'aria-level="(\d)"', el.get("html") or "")
+                lvl = int(m.group(1)) if m else 2
+            if not lvl:
+                continue
+            if el.get("ariaHidden") == "true":
+                continue
+            lbl = (el.get("label") or "").strip()
+            is_sr = el.get("testId") == "screen-reader" or "screen-reader" in (el.get("selector") or "")
+            # Buscar en qué paso fue anunciado este encabezado
+            ln = norm_utt(lbl)
+            matched_step = None
+            if ln:
+                for s in steps:
+                    un = norm_utt(s.get("utterance") or "")
+                    if ln in un or (len(un) >= 4 and un in ln):
+                        matched_step = s["i"]
+                        break
+            h_issues = []
+            if not lbl:
+                h_issues.append("Encabezado H%d vacío sin texto accesible" % lvl)
+            elif is_sr and len(lbl) > 120:
+                h_issues.append(
+                    "Jerarquía de encabezados (WCAG 1.3.1 / 2.4.6): encabezado oculto <h%d> contiene un párrafo extenso (%d caracteres) en lugar de un título corto"
+                    % (lvl, len(lbl))
+                )
+            headings.append({
+                "level": lvl,
+                "tag": "H%d" % lvl,
+                "label": lbl,
+                "selector": el.get("selector") or tag,
+                "is_sr_only": is_sr,
+                "step": matched_step,
+                "issues": h_issues,
+            })
+    else:
+        for s in steps:
+            u = (s.get("utterance") or "").strip()
+            m = re.search(r"\b(?:encabezado|heading)\s*([1-6])?\b", u, re.I)
+            if m:
+                lvl = int(m.group(1)) if m.group(1) else 2
+                clean_lbl = re.sub(r"[\s.·]*(?:encabezado|heading)\s*[1-6]?.*$", "", u, flags=re.I).strip()
+                headings.append({
+                    "level": lvl,
+                    "tag": "H%d" % lvl,
+                    "label": clean_lbl or u,
+                    "selector": "native-heading",
+                    "is_sr_only": False,
+                    "step": s["i"],
+                    "issues": [],
+                })
+
+    prev_lvl = 0
+    has_h1 = any(h["level"] == 1 for h in headings)
+    if headings and not has_h1:
+        msg = "Jerarquía de encabezados (WCAG 1.3.1 / 2.4.6): la vista no contiene ningún encabezado principal H1"
+        headings[0]["issues"].append(msg)
+        issues.append((headings[0].get("step") or 1, msg))
+
+    for h in headings:
+        lvl = h["level"]
+        if prev_lvl > 0 and lvl > prev_lvl + 1:
+            msg = (
+                "Jerarquía de encabezados (WCAG 1.3.1 / 2.4.6): salto de nivel semántico de H%d a H%d en «%s» (falta H%d intermedio)"
+                % (prev_lvl, lvl, h["label"][:55], prev_lvl + 1)
+            )
+            h["issues"].append(msg)
+            issues.append((h.get("step") or 1, msg))
+        for hi in h["issues"]:
+            if "salto de nivel" not in hi and "ningún encabezado principal" not in hi:
+                issues.append((h.get("step") or 1, hi))
+        prev_lvl = lvl
+
+    return headings, issues
+
+
+def analyze_unreachable_elements(dom_snapshot, steps):
+    """Detecta elementos informativos o controles en el DOM que TalkBack omitió durante el barrido (TB-UNREACH-001)."""
+    omitted = []
+    step_issues = []
+    if not isinstance(dom_snapshot, dict) or not dom_snapshot.get("elements"):
+        return omitted, step_issues
+
+    spoken_all = " || ".join(
+        norm_utt((s.get("utterance") or "") + " " + (s.get("label") or ""))
+        for s in steps
+        if not s.get("in_overlay")
+    )
+
+    # 1. Verificar filas de listas repetidas (ej. last-movements-widget-item0, 1, 2)
+    #    donde TalkBack lee solo '2 de 3' / '3 de 3' omitiendo el par de activos
+    for s in steps:
+        u = (s.get("utterance") or "").strip()
+        if re.match(r"^[2-9]\s*(?:de|of)\s*\d+\s*$", u, re.I):
+            msg = (
+                "Contenido omitido por el lector (WCAG 1.3.1): en el ítem de lista «%s» TalkBack omitió la etiqueta del par de activos (ej. 'ARS a Bitcoin')"
+                % u
+            )
+            step_issues.append((s["i"], msg))
+            omitted.append({
+                "selector": 'li[data-testid^="last-movements-widget-item"] > span[data-testid="screen-reader"]',
+                "tag": "span",
+                "label": "Etiqueta de par de operación en fila %s" % u,
+                "reason": "Omitido por TalkBack en filas 2..N ( anuncia únicamente '%s')" % u,
+                "step": s["i"],
+            })
+
+    # 2. Verificar controles e ítems semánticos del DOM (fuera de slides inactivos inert="")
+    seen_sel_lbl = set()
+    for el in dom_snapshot.get("elements", []):
+        tag = (el.get("tag") or "").lower()
+        html_raw = el.get("html") or ""
+        if 'inert=""' in html_raw or el.get("ariaHidden") == "true":
+            continue
+        if tag not in ("button", "a", "h1", "h2", "h3"):
+            continue
+        lbl = (el.get("label") or "").strip()
+        if not lbl or len(lbl) < 3:
+            continue
+        # Ignorar botones del widget flotante de desarrollo (Reset All / Move to left) o botón Back inicial
+        if lbl in ("Atrás", "Back", "Reset All", "Move to left"):
+            continue
+        ln = norm_utt(lbl)
+        if not ln or len(ln) < 3:
+            continue
+        key = (el.get("selector") or tag, ln)
+        if key in seen_sel_lbl:
+            continue
+        seen_sel_lbl.add(key)
+        # Comprobar si al menos las primeras palabras clave de la etiqueta fueron anunciadas
+        words = ln.split()
+        probe = " ".join(words[:3]) if len(words) >= 3 else ln
+        if probe not in spoken_all and ln not in spoken_all:
+            omitted.append({
+                "selector": el.get("selector") or tag,
+                "tag": tag,
+                "label": lbl[:110],
+                "reason": "No anunciado en ningún paso del barrido lineal (posible carrusel inactivo, contenedor oculto o foco interceptado)",
+                "step": None,
+            })
+
+    return omitted, step_issues

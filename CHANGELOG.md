@@ -2,6 +2,18 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.3.0] - 2026-10-22
+
+### Añadido
+- **Detección de contenido y controles del DOM omitidos por TalkBack (`TB-UNREACH-001` - WCAG 1.3.1 / 2.1.1)**:
+  - `analyze_unreachable_elements()` en `tb_audit/rules.py` cruza los elementos semánticos visibles del DOM activo con los anuncios reales de TalkBack, identificando etiquetas omitidas en filas repetidas de listas (`2 de 3`, `3 de 3` sin par de activos) o controles no alcanzados en el barrido, y renderiza la sección **Contenido / Controles del DOM Omitidos por TalkBack** en `report.html`.
+- **Mapa de Jerarquía de Encabezados (`Outline H1-H6`) y regla `TB-HEAD-002` (WCAG 1.3.1 / 2.4.6)**:
+  - `analyze_heading_hierarchy()` extrae la estructura `H1..H6` del DOM o del barrido nativo, valida la presencia de `<h1>`, detecta saltos de nivel (`H1 -> H3` sin `H2`) y encabezados ocultos (`screen-reader`) con párrafos extensos (`> 120` caracteres), y añade la sección visual **Mapa de Jerarquía de Encabezados** en el reporte HTML.
+- **Prueba desatendida de Retorno de Foco en Modales y Drawers (`--test-modals` - `TB-FOCUS-001`)**:
+  - En modo automático, al enfocar un botón disparador de modal/tooltip o selector de cuenta, lo activa con doble tap, captura la modal abierta, la cierra (`Cerrar` / `Close` / `BACK`) y evalúa automáticamente si el foco de TalkBack regresó al botón invocador.
+- **Generador de Portada Maestra (`index.html`) y empaquetado `.zip` de suite (`--pack [ZIP_FILE]` y automático en `--view all`)**:
+  - `build_suite_index()` en `tb_audit/report.py` construye el dashboard `index.html` con tarjetas de resumen para todas las vistas auditadas y genera el archivo `.zip` autocontenido listo para distribuir.
+
 ## [0.2.3] - 2026-10-22
 
 ### Añadido

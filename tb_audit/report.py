@@ -1,4 +1,4 @@
-"""Persistencia steps.json y generador de reporte HTML ejecutivo (v0.2.0)."""
+"""Persistencia steps.json, generador de reporte HTML ejecutivo e índice de suite (v0.3.0)."""
 
 import datetime
 import glob
@@ -6,11 +6,15 @@ import html
 import json
 import os
 import re
+import shutil
+import zipfile
 from . import VERSION
 from .cdp import match_dom_element
 from .config import load_config, role_of
 from .rules import (
+    analyze_heading_hierarchy,
     analyze_sequence_issues,
+    analyze_unreachable_elements,
     is_a11y_relevant,
     node_issues,
     node_key,
@@ -408,6 +412,15 @@ def save_steps_json(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None
 def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, view_info=None, cfg=None):
     tree_nodes = [n for n in tree_nodes if is_a11y_relevant(n)]
     analyze_sequence_issues(steps)
+    headings_outline, head_issues = analyze_heading_hierarchy(dom_snapshot, steps)
+    unreachable_els, unreach_issues = analyze_unreachable_elements(dom_snapshot, steps)
+    step_map = {s["i"]: s for s in steps}
+    for st_num, msg in head_issues + unreach_issues:
+        target_s = step_map.get(st_num) or (steps[0] if steps else None)
+        if target_s is not None:
+            target_s.setdefault("seq_issues", [])
+            if msg not in target_s["seq_issues"]:
+                target_s["seq_issues"].append(msg)
     for s in steps:
         if not s.get("dom") and dom_snapshot:
             s["dom"] = match_dom_element(s.get("utterance"), s.get("label"), dom_snapshot)
@@ -461,6 +474,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
             or "Gráfica sin salto" in it
             or "Tropicalización" in it
             or "Propósito de los enlaces" in it
+            or "Contenido omitido" in it
             for it in real_issues
         )
         if not is_dup:
@@ -482,6 +496,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                         or "Gráfica sin salto" in i
                         or "Tropicalización" in i
                         or "Propósito de los enlaces" in i
+                        or "Contenido omitido" in i
                     )
                     else ""
                 ),
@@ -895,6 +910,83 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
             )
         )
 
+    # Construir Mapa de Jerarquía de Encabezados (Outline H1-H6) y tabla de Elementos Omitidos (TB-UNREACH-001)
+    headings_section_html = ""
+    if headings_outline:
+        h_rows = []
+        for h in headings_outline:
+            indent_px = (h["level"] - 1) * 18
+            sr_badge = ' <span class="pill modal">SR-only</span>' if h.get("is_sr_only") else ""
+            step_link = (
+                '<a class="step-chip" href="#step-%d">Paso %d</a>' % (h["step"], h["step"])
+                if h.get("step")
+                else '<span class="state-pill warn">No alcanzado</span>'
+            )
+            h_warn = (
+                "".join('<div class="flag">%s</div>' % html.escape(w) for w in h.get("issues", []))
+                if h.get("issues")
+                else '<span class="state-pill ok">Orden OK</span>'
+            )
+            h_rows.append(
+                "<tr>"
+                "<td style='padding-left:%dpx'><span class='tax-lvl'>%s</span>%s <b>%s</b></td>"
+                "<td><code class='inl-code'>%s</code></td>"
+                "<td class='td-state'>%s</td>"
+                "<td>%s</td>"
+                "</tr>"
+                % (
+                    12 + indent_px,
+                    html.escape(h["tag"]),
+                    sr_badge,
+                    html.escape(h["label"][:130]),
+                    html.escape(h["selector"]),
+                    step_link,
+                    h_warn,
+                )
+            )
+        headings_section_html = (
+            '<h2 id="sec-headings"><span>Mapa de Jerarquía de Encabezados (Outline H1-H6)</span>'
+            "<span>%d encabezado(s) detectados</span></h2>"
+            '<div class="table-wrap"><table>'
+            '<colgroup><col class="c-lbl"><col class="c-role"><col class="c-state"><col class="c-find"></colgroup>'
+            "<thead><tr><th>Nivel y Texto del Encabezado</th><th>Selector DOM</th><th>Paso TalkBack</th><th>Validación Jerárquica</th></tr></thead>"
+            "<tbody>%s</tbody></table></div>"
+            % (len(headings_outline), "\n".join(h_rows))
+        )
+
+    unreach_section_html = ""
+    if unreachable_els:
+        u_rows = []
+        for u in unreachable_els:
+            st_chip = (
+                '<a class="step-chip" href="#step-%d">Paso %d</a>' % (u["step"], u["step"])
+                if u.get("step")
+                else '<span class="state-pill warn">Omitido en barrido</span>'
+            )
+            u_rows.append(
+                "<tr>"
+                "<td><b>%s</b></td>"
+                "<td><code class='inl-code'>%s</code></td>"
+                "<td class='td-state'>%s</td>"
+                "<td>%s</td>"
+                "</tr>"
+                % (
+                    html.escape(u["label"]),
+                    html.escape(u["selector"]),
+                    st_chip,
+                    html.escape(u["reason"]),
+                )
+            )
+        unreach_section_html = (
+            '<h2 id="sec-unreach"><span>Contenido / Controles del DOM Omitidos por TalkBack (TB-UNREACH-001)</span>'
+            "<span>%d elemento(s) con observación</span></h2>"
+            '<div class="table-wrap"><table>'
+            '<colgroup><col class="c-lbl"><col class="c-role"><col class="c-state"><col class="c-find"></colgroup>'
+            "<thead><tr><th>Etiqueta / Contenido en DOM</th><th>Selector DOM</th><th>Estado</th><th>Diagnóstico</th></tr></thead>"
+            "<tbody>%s</tbody></table></div>"
+            % (len(unreachable_els), "\n".join(u_rows))
+        )
+
     tree_rows = []
     for n in tree_nodes:
         if not is_a11y_relevant(n):
@@ -973,8 +1065,9 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
       <h1>Auditoría TalkBack - %(view_title)s <span class="verbadge">v%(ver)s</span></h1>
       <div class="hdr-actions">
         <a class="navlink" href="#sec-resumen">Resumen WCAG</a>
+        <a class="navlink" href="#sec-headings">Encabezados</a>
         <a class="navlink" href="#sec-jira">Bugs Jira</a>
-        <a class="navlink" href="#sec-poeditor">POEditor DB</a>
+        <a class="navlink" href="#sec-poeditor">Diccionario i18n</a>
         <a class="navlink" href="#sec-flujo">Mapa de secuencia</a>
         <a class="navlink" href="#sec-pasos">Pasos</a>
         <button class="btn-print" onclick="window.print()">Imprimir / PDF</button>
@@ -997,6 +1090,10 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
 <div class="exec-grid">%(exec_html)s</div>
 
 %(jira_section_html)s
+
+%(headings_section_html)s
+
+%(unreach_section_html)s
 
 %(po_section_html)s
 
@@ -1106,6 +1203,8 @@ qInput.addEventListener('input',applyFilter);
         "n_jira_active": n_jira_active,
         "exec_html": exec_html,
         "jira_section_html": jira_section_html,
+        "headings_section_html": headings_section_html,
+        "unreach_section_html": unreach_section_html,
         "po_section_html": po_section_html,
         "film": "\n".join(film_nodes),
         "cards": "\n".join(cards),
@@ -1193,3 +1292,159 @@ def rebuild_report(ocr_bin, out_dir, view_info=None, cfg=None):
     return build_report(
         steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg
     )
+
+
+def build_suite_index(out_dirs, suite_dir=None, zip_path=None, suite_title=None):
+    """Genera una portada maestra index.html enlazando múltiples reportes de una suite
+    y opcionalmente empaqueta un archivo .zip autocontenido."""
+    valid_dirs = [d for d in out_dirs if d and os.path.exists(os.path.join(d, "report.html"))]
+    if not valid_dirs:
+        return None, None
+    if not suite_dir:
+        suite_dir = os.path.commonpath([os.path.abspath(d) for d in valid_dirs])
+        if os.path.isfile(suite_dir) or any(
+            os.path.abspath(d) == suite_dir for d in valid_dirs
+        ):
+            suite_dir = os.path.dirname(suite_dir)
+    os.makedirs(suite_dir, exist_ok=True)
+
+    cards_html = []
+    meta_summary = ""
+    for idx, d in enumerate(valid_dirs, 1):
+        sjson = os.path.join(d, "steps.json")
+        vtitle = os.path.basename(os.path.abspath(d))
+        vroute = ""
+        n_steps = 0
+        b_ver = ""
+        po_ver = ""
+        if os.path.exists(sjson):
+            try:
+                data = json.load(open(sjson, encoding="utf-8"))
+                vi = data.get("view_info") or {}
+                vtitle = vi.get("title") or vtitle
+                vroute = vi.get("route_hash") or ""
+                n_steps = len(data.get("steps") or [])
+                ds = data.get("dom_snapshot") or {}
+                b_ver = ds.get("bundleVersion") or ""
+                po = ds.get("poeditor") or {}
+                if po.get("version"):
+                    po_ver = "%s v%s (%s, %d keys)" % (
+                        po.get("dbName") or "i18n",
+                        po["version"],
+                        po.get("language", ""),
+                        po.get("totalKeys", 0),
+                    )
+                if not meta_summary and data.get("meta"):
+                    meta_summary = data["meta"]
+            except Exception:
+                pass
+        rel_rep = os.path.relpath(os.path.join(d, "report.html"), suite_dir)
+        route_line = ("<code>%s</code> · " % html.escape(vroute)) if vroute else ""
+        ver_line = ("Bundle v%s" % html.escape(b_ver)) if b_ver else ""
+        if po_ver:
+            ver_line = (ver_line + " · " + html.escape(po_ver)).strip(" ·")
+        cards_html.append(
+            '<div class="card">'
+            "<div>"
+            "<h2>%d. %s</h2>"
+            "<p>%s<b>%d pasos capturados</b>%s</p>"
+            "</div>"
+            '<a class="btn" href="%s">Abrir Reporte</a>'
+            "</div>"
+            % (
+                idx,
+                html.escape(vtitle),
+                route_line,
+                n_steps,
+                (" · " + ver_line) if ver_line else "",
+                html.escape(rel_rep),
+            )
+        )
+
+    title_hdr = suite_title or ("Suite de Auditoría TalkBack v%s (%d vistas)" % (VERSION, len(valid_dirs)))
+    idx_doc = """<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>%(title)s</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f2f4f7; color: #1d2433; line-height: 1.5; }
+    header { background: #0f172a; color: #fff; padding: 24px; border-bottom: 3px solid #0284c7; }
+    .inner { max-width: 1020px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 21px; }
+    .sub { color: #cbd5e1; font-size: 12.5px; margin: 0; }
+    main { max-width: 1020px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-top: 4px solid #0284c7; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(15,23,42,.06); display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+    .card h2 { margin: 0; font-size: 15.5px; color: #0f172a; }
+    .card p { margin: 6px 0 0; font-size: 12.5px; color: #475569; overflow-wrap: anywhere; }
+    .card code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 11px; color: #0f172a; }
+    .btn { display: inline-block; background: #0f172a; color: #fff; text-decoration: none; font-size: 12.5px; font-weight: 600; padding: 8px 14px; border-radius: 6px; text-align: center; }
+    .btn:hover { background: #0284c7; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>%(title)s</h1>
+      <p class="sub">%(meta)s</p>
+    </div>
+  </header>
+  <main>
+    <div class="grid">
+      %(cards)s
+    </div>
+  </main>
+</body>
+</html>
+""" % {
+        "title": html.escape(title_hdr),
+        "meta": html.escape(meta_summary or ("Generado con TalkBack Audit v%s" % VERSION)),
+        "cards": "\n      ".join(cards_html),
+    }
+
+    index_path = os.path.join(suite_dir, "index.html")
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(idx_doc)
+
+    built_zip = None
+    if zip_path:
+        built_zip = os.path.abspath(zip_path)
+        stage_root = os.path.join(suite_dir, "_stage_pack_tmp")
+        if os.path.exists(stage_root):
+            shutil.rmtree(stage_root)
+        os.makedirs(stage_root, exist_ok=True)
+        try:
+            stage_cards = []
+            for idx, d in enumerate(valid_dirs, 1):
+                sub_name = "%02d_%s" % (idx, os.path.basename(os.path.abspath(d)))
+                dst_d = os.path.join(stage_root, sub_name)
+                os.makedirs(os.path.join(dst_d, "img"), exist_ok=True)
+                shutil.copy2(os.path.join(d, "report.html"), os.path.join(dst_d, "report.html"))
+                if os.path.exists(os.path.join(d, "steps.json")):
+                    shutil.copy2(os.path.join(d, "steps.json"), os.path.join(dst_d, "steps.json"))
+                img_src = os.path.join(d, "img")
+                if os.path.isdir(img_src):
+                    for fn in sorted(os.listdir(img_src)):
+                        if fn.startswith("step_") and fn.endswith(".png"):
+                            shutil.copy2(os.path.join(img_src, fn), os.path.join(dst_d, "img", fn))
+                old_rel = os.path.relpath(os.path.join(d, "report.html"), suite_dir)
+                new_rel = "%s/report.html" % sub_name
+                idx_doc = idx_doc.replace('href="%s"' % html.escape(old_rel), 'href="%s"' % html.escape(new_rel))
+            with open(os.path.join(stage_root, "index.html"), "w", encoding="utf-8") as f:
+                f.write(idx_doc)
+            if os.path.exists(built_zip):
+                os.remove(built_zip)
+            arc_prefix = os.path.splitext(os.path.basename(built_zip))[0]
+            with zipfile.ZipFile(built_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, _, files in os.walk(stage_root):
+                    for fn in sorted(files):
+                        full = os.path.join(root, fn)
+                        rel = os.path.join(arc_prefix, os.path.relpath(full, stage_root))
+                        zf.write(full, rel)
+        finally:
+            shutil.rmtree(stage_root, ignore_errors=True)
+
+    return index_path, built_zip

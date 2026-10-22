@@ -1,8 +1,8 @@
-# TalkBack Audit (`v0.2.3`)
+# TalkBack Audit (`v0.3.0`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 
-Automatiza o asiste el recorrido lineal con TalkBack, captura la imagen y el anuncio hablado real de cada paso desde la barra oficial de subtítulos de TalkBack (`Display speech output`), inspecciona en vivo el árbol DOM / ARIA e `IndexedDB` de WebViews mediante **Chrome DevTools Protocol (CDP)**, evalúa **14 reglas de accesibilidad (`TB-*`) mapeadas a los 86 criterios oficiales de WCAG 2.2 (A / AA / AAA)** y genera un reporte ejecutivo interactivo (`report.html` + `steps.json`).
+Automatiza o asiste el recorrido lineal con TalkBack, captura la imagen y el anuncio hablado real de cada paso desde la barra oficial de subtítulos de TalkBack (`Display speech output`), inspecciona en vivo el árbol DOM / ARIA e `IndexedDB` de WebViews mediante **Chrome DevTools Protocol (CDP)**, evalúa **16 reglas de accesibilidad (`TB-*`) mapeadas a los 86 criterios oficiales de WCAG 2.2 (A / AA / AAA)** y genera un reporte ejecutivo interactivo (`report.html` + `steps.json` + portada maestra `index.html`).
 
 ---
 
@@ -101,6 +101,8 @@ python3 talkback_audit.py --stop-talkback --setup-only
 | `--setup-only` | Configura TalkBack y subtítulos y termina sin iniciar barrido | `False` |
 | `--no-setup` | Omite el reinicio de TalkBack cuando ya está activo en la pantalla objetivo | `False` |
 | `--stop-talkback` | Desactiva TalkBack al terminar | `False` |
+| `--test-modals` | En modo automático, abre y cierra modales/drawers detectados para validar `Focus Return` (`TB-FOCUS-001`) | `False` |
+| `--pack [ZIP_FILE]` | Genera portada maestra `index.html` y empaqueta la suite de reportes en un archivo `.zip` autocontenido | - |
 | `--rebuild DIR` | Reconstruye `report.html` a partir de `steps.json` y las capturas de `DIR/img/` | - |
 
 ---

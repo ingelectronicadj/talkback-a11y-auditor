@@ -1,19 +1,21 @@
 # Catálogo de Reglas `TB-*` y Taxonomía WCAG 2.2
 
-**TalkBack Audit** incluye los **86 criterios de conformidad de WCAG 2.2 (Niveles A, AA y AAA)** en `tb_audit/wcag_catalog.py` y evalúa automáticamente **14 reglas especializadas para lectores de pantalla móviles (`TB-*`)** en `tb_audit/rules.py`.
+**TalkBack Audit** incluye los **86 criterios de conformidad de WCAG 2.2 (Niveles A, AA y AAA)** en `tb_audit/wcag_catalog.py` y evalúa automáticamente **16 reglas especializadas para lectores de pantalla móviles (`TB-*`)** en `tb_audit/rules.py`.
 
 ---
 
-## Resumen de las 14 Reglas Automatizadas (`TB-*`)
+## Resumen de las 16 Reglas Automatizadas (`TB-*`)
 
 | ID Regla | Criterio WCAG 2.2 | Nivel | Severidad | Qué detecta |
 |---|---|---|---|---|
-| `TB-I18N-001` | `3.1.2` Idioma de las partes / `2.4.6` | AA | Alta | Keys de traducción crudas sin resolver (`a11y_*`, `mb_mc_*`), textos en inglés dentro de vistas en español, placeholders sin interpolar (`{variable}`) o errores de tilde/voseo. |
+| `TB-I18N-001` | `3.1.2` Idioma de las partes / `2.4.6` | AA | Alta | Keys de traducción crudas sin resolver (`a11y_*`, `mb_mc_*`), textos en inglés dentro de vistas en español (o viceversa), placeholders sin interpolar (`{variable}`) o errores de tilde/voseo. |
 | `TB-LINK-001` | `2.4.4` Propósito de los enlaces | A | Alta | Enlaces sin texto de destino (anuncian solo `«(Abrir una nueva ventana). vínculo»`) o que duplican su etiqueta (`«Saber más. Saber más...»`) por autorreferencia en `aria-labelledby`. |
 | `TB-SKEL-001` | `4.1.3` Mensajes de estado / `2.4.3` | AA | Alta | Pantallas o drawers en estado de carga con *skeletons* que no anuncian `«Cargando {título}»`, pierden el foco hacia el overlay de TalkBack o dejan nodos `role="status"` vacíos (`«status»`). |
 | `TB-CHART-001` | `2.4.1` Evitar bloques | A | Alta | Gráficas interactivas (`<svg>`) cuyos puntos individuales (`<circle>`) tienen `tabindex="0"` y obligan al usuario de TalkBack a hacer decenas o cientos de swipes para cruzar la gráfica. |
 | `TB-FOCUS-001` | `2.4.3` Orden del foco | A | Alta | Pérdida de retorno de foco (*Focus Return*): al cerrar un diálogo modal, tooltip o drawer, el foco de TalkBack no regresa al botón disparador que lo abrió. |
 | `TB-CURR-001` | `1.3.1` Información y relaciones | A | Alta | Importes monetarios en pesos u otra moneda local que usan el símbolo `$` sin desambiguar en `aria-label` / `contentDescription`, haciendo que el TTS en español anuncie `«dólares»` o `«Signo de dólar»`. |
+| `TB-UNREACH-001` | `1.3.1` Información y relaciones / `2.1.1` | A | Alta | Elementos o etiquetas semánticas presentes en el DOM activo (como el par de activos en filas 2..N de listas de movimientos o controles visibles) que son omitidos por TalkBack durante el barrido lineal. |
+| `TB-HEAD-002` | `1.3.1` Información y relaciones / `2.4.6` | A | Media | Jerarquía de encabezados (`H1-H6`) con saltos de nivel (`H1 -> H3` sin `H2`), ausencia de `H1` principal o encabezados ocultos (`screen-reader`) que contienen párrafos extensos (`> 120` caracteres). |
 | `TB-NAME-001` | `4.1.2` Nombre, función, valor | A | Alta | Controles interactivos (`clickable` / `focusable`) que carecen de nombre accesible (`text`, `contentDescription` o `aria-label`). |
 | `TB-IMG-001` | `1.1.1` Contenido no textual | A | Alta | Imágenes, iconos o gráficos (`ImageView`, `ImageButton`, `<svg>`, `<img>`) sin alternativa textual (`Sin etiquetar. Imagen`) o logos decorativos sin `alt=""` que disparan el OCR de TalkBack (`Detected: Text`). |
 | `TB-MERGE-001` | `1.3.2` Secuencia significativa | A | Media | Un único paso de foco concatena `>= 18` palabras (o duplica párrafos largos dentro de un encabezado oculto `<h2>`), o fragmenta filas relacionales omitiendo contexto. |
