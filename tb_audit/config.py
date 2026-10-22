@@ -45,6 +45,7 @@ CURRENCY_NOTES = {
 
 DEFAULT_CONFIG = {
     "device": os.environ.get("ANDROID_SERIAL", "emulator-5554"),
+    "locale": os.environ.get("TB_LOCALE", ""),
     "app_pkg": os.environ.get("TB_APP_PKG", ""),
     "login_url": os.environ.get("TB_LOGIN_URL", ""),
     "sso_url": os.environ.get("TB_SSO_URL", ""),
@@ -95,15 +96,13 @@ def load_config(config_path=None, user_id=None, core_user_id=None, sso_token=Non
     """Carga configuración combinando defaults agnósticos, `config.local.json` (si existe),
     archivo `--config` opcional y argumentos de línea de comandos."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
-    if os.path.exists(LOCAL_CONFIG_PATH):
+    target_cfg = config_path if config_path else (LOCAL_CONFIG_PATH if os.path.exists(LOCAL_CONFIG_PATH) else None)
+    if target_cfg and os.path.exists(target_cfg):
         try:
-            with open(LOCAL_CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(target_cfg, "r", encoding="utf-8") as f:
                 _deep_merge(cfg, json.load(f))
         except Exception:
             pass
-    if config_path and os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            _deep_merge(cfg, json.load(f))
     if app_pkg:
         cfg["app_pkg"] = str(app_pkg).strip()
     if user_id:

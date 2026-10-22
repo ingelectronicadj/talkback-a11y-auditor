@@ -88,6 +88,8 @@ DOM_EXTRACT_JS = r"""
   try {
     const dbs = (await indexedDB.databases?.()) || [];
     const dbNames = dbs.map(d => d.name).filter(Boolean);
+    // Priorizar bases de datos de dominio/microfrontend sobre CONFIG genérico
+    dbNames.sort((a, b) => (a === 'CONFIG' ? 1 : b === 'CONFIG' ? -1 : a.includes('CRYPTO') ? -1 : 0));
     for (const dbName of dbNames) {
       const db = await new Promise((res, rej) => {
         const req = indexedDB.open(dbName);
@@ -101,9 +103,10 @@ DOM_EXTRACT_JS = r"""
           q.onsuccess = () => r(q.result);
           q.onerror = () => r(null);
         });
-        if (val && val.entries && Object.keys(val.entries).length > 10) {
+        if (val && val.entries && Object.keys(val.entries).length > 30) {
           entries = val.entries;
           dbUsed = dbName;
+          const langLow = (val.language || '').toLowerCase();
           const englishKeys = [];
           const uninterpolatedKeys = [];
           const emptyKeys = [];
@@ -117,14 +120,16 @@ DOM_EXTRACT_JS = r"""
             if (/\{([A-Z][A-Z0-9_\s]{2,25}|\d{2,}\.\d{2,})\}|\{[A-Za-z0-9_]+\]|\[[A-Za-z0-9_]+\}/.test(v)) {
               uninterpolatedKeys.push({ key: k, value: v, note: 'Placeholder literal sin interpolar o delimitador mal cerrado' });
             }
-            if (/\b(select your|select a|select the|choose one|change frequency|you can only select|prices are volatile|this will be the account)\b/i.test(v)) {
+            if (langLow.startsWith('es') && /\b(select your|select a|select the|choose one|change frequency|you can only select|prices are volatile|this will be the account)\b/i.test(v)) {
               englishKeys.push({ key: k, value: v, note: 'Texto en inglés dentro de paquete localizado (' + (val.language || 'es') + ')' });
+            } else if (langLow.startsWith('en') && /\b(en el complejo ecosistema|en el actual ecosistema|descripci[oó]n corta|pendiente del equipo)\b/i.test(v)) {
+              englishKeys.push({ key: k, value: v, note: 'Texto en español sin traducir dentro del paquete en inglés (' + (val.language || 'en-us') + ')' });
             }
             if (/\b[uú]ltimas\s+ordenes\b/i.test(v)) {
               styleOrTypoKeys.push({ key: k, value: v, note: 'Falta tilde en "Últimas órdenes"' });
             } else if (k.startsWith('a11y_') && v.length > 140) {
               styleOrTypoKeys.push({ key: k, value: v.slice(0, 110) + '...', note: 'Key de encabezado oculto (h2) contiene párrafo largo completo (duplica anuncio)' });
-            } else if ((val.language || '').toLowerCase() === 'es-ar' && /\b(puedes|quieres|tienes|selecciona|ingresa)\b/i.test(v)) {
+            } else if (langLow === 'es-ar' && /\b(puedes|quieres|tienes|selecciona|ingresa)\b/i.test(v)) {
               styleOrTypoKeys.push({ key: k, value: v, note: 'Tuteo (es-ES) en lugar de voseo argentino (es-AR: podés/querés/tenés)' });
             }
           }
@@ -260,20 +265,37 @@ DOM_EXTRACT_JS = r"""
 
 
 def _connect_cdp_ws(adb_client, port=9222):
+    fg_pkg, _ = adb_client.get_foreground_package()
+    fg_pid = ""
+    if fg_pkg:
+        fg_pid = adb_client.run(["shell", "pidof", fg_pkg], check=False).strip().split()[0] if adb_client.run(["shell", "pidof", fg_pkg], check=False).strip() else ""
     unix_out = adb_client.run(
-        ["shell", "cat /proc/net/unix | grep -o 'webview_devtools_remote_[0-9]*' | head -1"],
+        ["shell", "cat /proc/net/unix | grep -o 'webview_devtools_remote_[0-9]*' | sort -u"],
         check=False,
     ).strip()
     if not unix_out:
         return None
-    sock_name = unix_out.splitlines()[0].strip()
+    socks = [s.strip() for s in unix_out.splitlines() if s.strip()]
+    sock_name = socks[-1]
+    if fg_pid:
+        target = "webview_devtools_remote_%s" % fg_pid
+        if target in socks:
+            sock_name = target
     adb_client.run(["forward", "tcp:%d" % port, "localabstract:%s" % sock_name], check=False)
     pages = json.loads(
         urllib.request.urlopen("http://127.0.0.1:%d/json" % port, timeout=4).read()
     )
     if not pages:
         return None
-    ws_url = pages[0].get("webSocketDebuggerUrl", "")
+    chosen = pages[0]
+    for p in pages:
+        u = (p.get("url") or "").lower()
+        if ("hybrid/" in u or "crypto" in u) and "tiqcdn" not in u:
+            chosen = p
+            break
+        if u and "tiqcdn" not in u and u != "about:blank":
+            chosen = p
+    ws_url = chosen.get("webSocketDebuggerUrl", "")
     if not ws_url:
         return None
     return "/" + ws_url.split("/", 3)[3]

@@ -2,6 +2,26 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.2.3] - 2026-10-22
+
+### Añadido
+- **Cambio automático de idioma del emulador (`--locale` y `"locale"` en el perfil JSON)**:
+  - `AdbClient.ensure_locale(target_locale)` verifica el idioma activo de Android (`persist.sys.locale`) y, si difiere del idioma de la app bajo prueba (ej. `en-US` vs `es-AR`), reordena automáticamente el idioma preferido #1 en `LOCALE_SETTINGS` y reinicia TalkBack para limpiar la caché de roles de accesibilidad de Chromium (`heading 1` / `Button` / `link` vs `encabezado 1` / `Botón` / `vínculo`).
+- **Selección de socket CDP por PID de la app activa y filtrado de WebViews de analítica (`tb_audit/cdp.py`)**:
+  - Cuando coexisten varias aplicaciones con WebViews abiertos en el emulador, `_connect_cdp_ws` resuelve el `PID` del paquete en primer plano (`pidof <fg_pkg>`).
+  - Filtra automáticamente WebViews secundarios en segundo plano (como contenedores de telemetría/tag managers `tiqcdn.com` o `about:blank`) para conectarse siempre al WebView real de la vista.
+- **Priorización de diccionarios `IndexedDB` de dominio y auditoría cruzada `en` <-> `es` (`tb_audit/cdp.py`)**:
+  - Prioriza almacenes de traducciones de dominio (`> 30 keys`) sobre almacenes de configuración cortos (`CONFIG`) y detecta tanto textos en inglés sin localizar dentro de paquetes `es-*` como textos en español olvidados dentro de paquetes `en-*`.
+- **Reglas y automatismos bilingües `es` / `en` (`tb_audit/rules.py`, `talkback_audit.py`)**:
+  - Soporte bilingüe en `TB-CHART-001` y `[auto-skip gráfica]` (`Date: ..., Value: ...` y `Fecha: ..., Valor: ...`), avance automático de carruseles (`Next tip` y `Siguiente consejo`), detección de enlaces duplicados en `TB-LINK-001` (`Learn more. Learn more...` y `Saber más. Saber más...`) y evaluación de `TB-LANG-001` / `TB-CURR-001` sensible al idioma esperado de la vista.
+- **Auto-cierre de diálogos de sistema tras instalar un `.apk` (`AdbClient.dismiss_system_dialogs`)**:
+  - Cierra automáticamente en primer arranque el aviso de compatibilidad de página de 16 KB de Android 15/16 (`No volver a mostrar` / `Don't show again`) y el diálogo de permiso de notificaciones (`Permitir` / `Allow`).
+
+### Corregido
+- **Aislamiento de perfiles al usar `--config <archivo.json>` (`tb_audit/config.py`, `tb_audit/report.py`)**:
+  - Pasar `--config` ahora carga exclusivamente el archivo indicado sin mezclar claves de `config.local.json`, y propaga el objeto `cfg` a `build_report` y `rebuild_report`.
+- **Corrección de atributo `self.adb_bin` en `AdbClient.install_apk` (`tb_audit/adb_client.py`)**.
+
 ## [0.2.2] - 2026-10-21
 
 ### Añadido

@@ -405,7 +405,7 @@ def save_steps_json(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None
     return p
 
 
-def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, view_info=None):
+def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, view_info=None, cfg=None):
     tree_nodes = [n for n in tree_nodes if is_a11y_relevant(n)]
     analyze_sequence_issues(steps)
     for s in steps:
@@ -429,12 +429,17 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
         is_skel = bool(s.get("is_skeleton"))
         is_load_ann = bool(s.get("is_loading_ann")) or utt.lower().strip() == "status"
         issues = []
+        exp_loc = "es"
+        if isinstance(dom_snapshot, dict) and dom_snapshot.get("lang"):
+            exp_loc = dom_snapshot["lang"]
+        elif "locale en" in (meta or "").lower():
+            exp_loc = "en"
         if node:
             for it in node_issues(node):
                 if it not in issues:
                     issues.append(it)
         for txt in (label, utt):
-            for it in text_a11y_issues(txt):
+            for it in text_a11y_issues(txt, expected_locale=exp_loc):
                 if it not in issues:
                     issues.append(it)
         for it in s.get("seq_issues") or []:
@@ -639,7 +644,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                 % (fcls, s["i"], cap_txt, s["i"], short_txt)
             )
 
-    cfg = load_config()
+    cfg = cfg or load_config()
     jira_bugs = cfg.get("jira_bugs") or []
     jira_base = (cfg.get("jira_base_url") or "https://your-org.atlassian.net").rstrip("/")
     rule_to_jkeys = {}
@@ -1112,7 +1117,7 @@ qInput.addEventListener('input',applyFilter);
     return path
 
 
-def rebuild_report(ocr_bin, out_dir, view_info=None):
+def rebuild_report(ocr_bin, out_dir, view_info=None, cfg=None):
     """Regenera report.html de una corrida previa: usa steps.json si existe y re-ejecuta OCR + heurísticas."""
     json_path = os.path.join(out_dir, "steps.json")
     saved_by_i = {}
@@ -1136,7 +1141,7 @@ def rebuild_report(ocr_bin, out_dir, view_info=None):
     if not view_info:
         view_info = saved_view_info
         if not view_info:
-            cfg = load_config()
+            cfg = cfg or load_config()
             for vspec in (cfg.get("views") or {}).values():
                 if vspec.get("out") and os.path.abspath(vspec["out"]) == os.path.abspath(out_dir):
                     view_info = {
@@ -1186,5 +1191,5 @@ def rebuild_report(ocr_bin, out_dir, view_info=None):
         % (len(steps), datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
     )
     return build_report(
-        steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=view_info
+        steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg
     )

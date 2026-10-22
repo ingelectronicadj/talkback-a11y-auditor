@@ -157,7 +157,7 @@ def run_manual(adb_client, ocr_bin, out_dir, args):
 
 
 def _is_chart_point_utt(utt):
-    return bool(re.search(r"fecha:.*valor", (utt or "").lower()))
+    return bool(re.search(r"(fecha:.*valor|date:.*value)", (utt or "").lower()))
 
 
 def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None):
@@ -261,9 +261,9 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
         })
         print("      %3d. %-52s | dice: %s" % (i, lbl[:50] or "?", (utt or "")[:60]))
 
-        # Si enfocamos el botón "Siguiente consejo" de un carrusel y no está inhabilitado,
+        # Si enfocamos el botón "Siguiente consejo" / "Next tip" de un carrusel y no está inhabilitado,
         # lo activamos con doble tap y retrocedemos 5 elementos por swipe para leer la nueva tarjeta.
-        if "siguiente consejo" in (utt or "").lower() and not re.search(
+        if re.search(r"siguiente consejo|next tip", (utt or "").lower()) and not re.search(
             r"disabled|inhabilitado|deshabilitado|no disponible", (utt or "").lower()
         ):
             adb_client.emu_double_tap()
@@ -352,15 +352,17 @@ def navigate_to_view(adb_client, cfg, view_spec):
             _refresh_session(cfg)
         except Exception as e:
             print("      [view] aviso refresh SSO: %s" % e)
-    adb_client.talkback_off()
-    time.sleep(0.8)
     pkg = cfg.get("app_pkg") or ""
     act = view_spec.get("start_activity") or ""
+    tap_xy = view_spec.get("entry_tap")
+    needs_native_entry = bool((pkg and act) or (tap_xy and len(tap_xy) == 2))
+    if needs_native_entry:
+        adb_client.talkback_off()
+        time.sleep(0.8)
     if pkg and act:
         comp = ("%s/%s" % (pkg, act)) if "/" not in act else act
         adb_client.run(["shell", "am", "start", "-n", comp], check=False)
         time.sleep(2.0)
-    tap_xy = view_spec.get("entry_tap")
     if tap_xy and len(tap_xy) == 2:
         if cfg.get("sso_url") and cfg.get("login_url"):
             try:
@@ -371,6 +373,7 @@ def navigate_to_view(adb_client, cfg, view_spec):
         time.sleep(float(view_spec.get("entry_wait_sec", 10.0)))
     if view_spec.get("cdp_steps"):
         run_cdp_steps(adb_client, view_spec["cdp_steps"])
+    return needs_native_entry
 
 
 def _print_installed_apps(adb_client):
@@ -452,6 +455,7 @@ def main():
     ap.add_argument("--idle", type=float, default=10, help="segundos sin cambios para terminar en modo manual")
     ap.add_argument("--out", default=None, help="directorio del reporte")
     ap.add_argument("--pkg", default=None, metavar="PACKAGE", help="paquete Android de la app bajo prueba (o TB_APP_PKG / config.local.json)")
+    ap.add_argument("--locale", default=None, metavar="BCP47", help="idioma objetivo para TalkBack y el emulador (ej. es-AR, en-US)")
     ap.add_argument("--device", default=None, help="serial del emulador (default: emulator-5554 o ANDROID_SERIAL)")
     ap.add_argument("--avd", default=None, help="nombre del AVD a levantar si no hay emulador corriendo")
     ap.add_argument("--delay", type=float, default=1.4, help="espera tras cada gesto (s)")
@@ -509,15 +513,18 @@ def main():
         print("Regenerando reporte desde %s ..." % args.rebuild)
         ocr_bin = None if args.no_ocr else ensure_ocr_binary()
         v_info = {"title": args.view_title} if args.view_title else None
-        print("Reporte: %s" % rebuild_report(ocr_bin, args.rebuild, view_info=v_info))
+        print("Reporte: %s" % rebuild_report(ocr_bin, args.rebuild, view_info=v_info, cfg=cfg))
         return
 
     adb_client = AdbClient(device=cfg["device"], timeout=cfg["adb_timeout"])
     adb_client.ensure_emulator_running(avd_name=args.avd)
+    target_loc = args.locale or cfg.get("locale") or ""
+    if target_loc:
+        adb_client.ensure_locale(target_loc)
     env_info = adb_client.preflight_check()
-    if env_info["locale"].startswith("en"):
+    if not target_loc and env_info["locale"].startswith("en"):
         print(
-            "      [preflight] AVISO: emulador en locale '%s' (generará anuncios del lector en inglés; recomendado es-AR)"
+            "      [preflight] AVISO: emulador en locale '%s' (usa --locale es-AR si auditas una app en español)"
             % env_info["locale"]
         )
 
@@ -612,18 +619,19 @@ def main():
         orig_steps = args.steps
         args.steps = int(orig_steps or v_spec.get("steps") or 80)
 
+        did_off = False
         if v_spec:
-            navigate_to_view(adb_client, cfg, v_spec)
+            did_off = navigate_to_view(adb_client, cfg, v_spec)
 
         if args.net_delay and args.net_delay > 0:
             print("      [net-delay] aplicando latencia de red de %d ms en el emulador..." % args.net_delay)
             adb_client.set_network_delay(args.net_delay)
 
         print("      capturando árbol accesible inicial...")
-        nodes0 = adb_client.dump_nodes()
+        nodes0 = adb_client.dump_nodes() if did_off else []
         last_nodes = nodes0
         dom_snapshot = capture_webview_dom(adb_client)
-        if v_spec:
+        if did_off or not v_spec:
             adb_client.talkback_on()
             time.sleep(2.5)
         if dom_snapshot:
@@ -703,7 +711,7 @@ def main():
         }
         tree = [n for n in (last_nodes or nodes0) if is_a11y_relevant(n)]
         path = build_report(
-            steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info
+            steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg
         )
         print("Reporte: %s" % path)
 

@@ -64,18 +64,19 @@ def is_a11y_relevant(n):
     return any(short.endswith(c) for c in INTERESTING_CLS)
 
 
-def text_a11y_issues(text):
+def text_a11y_issues(text, expected_locale="es"):
     """Heurísticas sobre cualquier texto/etiqueta o utterance anunciada."""
     issues = []
     if not text:
         return issues
+    exp_en = (expected_locale or "").lower().startswith("en")
     without_usd = re.sub(r"US\$\s*", "", text)
-    if "$" in without_usd:
+    if "$" in without_usd and not exp_en:
         issues.append(
             "Moneda (WCAG 1.3.1): el símbolo '$' sin desambiguar se sintetiza como 'dólares' en TTS español aunque represente pesos ARS"
         )
     for sym, note in CURRENCY_NOTES.items():
-        if sym != "$" and sym in text:
+        if sym != "$" and sym != "€" and sym in text:
             issues.append("Moneda: " + note)
     words = text.split()
     if len(words) >= 18:
@@ -84,11 +85,11 @@ def text_a11y_issues(text):
             % len(words)
         )
     low = text.lower()
-    if any(re.search(p, low) for p in EN_SPEECH_PATTERNS):
+    if not exp_en and any(re.search(p, low) for p in EN_SPEECH_PATTERNS):
         issues.append(
             "Idioma / Locale (WCAG 3.1.2): anuncio mezcla frases del lector en inglés con UI en español (emulador en locale en-US)"
         )
-    if re.search(r"tuvimos un problema|ocurri[oó] un error al cargar|no es posible recuperar", low):
+    if re.search(r"tuvimos un problema|ocurri[oó] un error al cargar|no es posible recuperar|something went wrong|unable to retrieve", low):
         issues.append(
             "Mensajes de estado (WCAG 4.1.3): estado de error en pantalla («%s»)"
             % text[:70]
@@ -110,7 +111,7 @@ def text_a11y_issues(text):
             "Tropicalización / i18n (WCAG 3.1.2 / 4.1.2): key técnica cruda sin resolver expuesta en aria-label («%s»)"
             % ", ".join(raw_keys[:2])
         )
-    elif re.search(
+    elif not exp_en and re.search(
         r"associated account|available balance|you can change the associated account|"
         r"select your linked account|select a cryptocurrency|choose one account|"
         r"select the amount|change frequency|you can only select a",
@@ -118,6 +119,14 @@ def text_a11y_issues(text):
     ):
         issues.append(
             "Tropicalización / i18n (WCAG 3.1.2): etiqueta accesible en inglés sin localizar en vista en español («%s»)"
+            % text[:80]
+        )
+    elif exp_en and re.search(
+        r"\b(en el complejo ecosistema|en el actual ecosistema|descripci[oó]n corta|pendiente del equipo)\b",
+        low,
+    ):
+        issues.append(
+            "Tropicalización / i18n (WCAG 3.1.2): texto en español sin traducir expuesto en vista en inglés («%s»)"
             % text[:80]
         )
     if re.search(r"\b[uú]ltimas\s+ordenes\b|\bultimas\s+[oó]rdenes\b", low):
@@ -130,14 +139,17 @@ def text_a11y_issues(text):
             "Tropicalización / i18n (WCAG 3.1.2): texto en tuteo (es-ES) en lugar de voseo es-AR («%s»)"
             % text[:70]
         )
-    if re.search(r"^\s*\(?abrir una nueva ventana\)?[\s.·]*(v[ií]nculo|link)?\s*$", low):
+    if re.search(
+        r"^\s*\(?(abrir una nueva ventana|open a new window)\)?[\s.·]*(v[ií]nculo|link)?\s*$",
+        low,
+    ):
         issues.append(
             "Propósito de los enlaces (WCAG 2.4.4): enlace sin texto de destino; anuncia únicamente «%s»"
             % text[:60]
         )
-    elif re.search(r"\bsaber m[aá]s[.\s·]+saber m[aá]s\b", low):
+    elif re.search(r"\b(saber m[aá]s[.\s·]+saber m[aá]s|learn more[.\s·]+learn more)\b", low):
         issues.append(
-            "Propósito de los enlaces (WCAG 2.4.4): etiqueta accesible duplica el texto «Saber más. Saber más...» en el anuncio del vínculo"
+            "Propósito de los enlaces (WCAG 2.4.4): etiqueta accesible duplica el texto («Saber más / Learn more») en el anuncio del vínculo"
         )
     if re.search(
         r"unlabelled|unlabeled|sin etiquetar|detected:\s*text|etected:\s*text|texto detectado",
@@ -210,8 +222,8 @@ def analyze_sequence_issues(steps):
         s["is_loading_ann"] = bool(
             re.search(r"\b(cargando|loading)\b", (utt + " " + raw_cap).lower())
         )
-        # Detectar serie de puntos de gráfica (Fecha: ..., Valor: ...)
-        if re.search(r"fecha:.*valor", (utt + " " + lbl).lower()):
+        # Detectar serie de puntos de gráfica (Fecha: ..., Valor: ... / Date: ..., Value: ...)
+        if re.search(r"(fecha:.*valor|date:.*value)", (utt + " " + lbl).lower()):
             chart_streak += 1
             if chart_streak == 5 and not chart_flagged:
                 chart_flagged = True

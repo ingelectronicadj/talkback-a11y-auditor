@@ -106,6 +106,61 @@ class AdbClient:
         sdk = self.run(["shell", "getprop", "ro.build.version.sdk"], check=False).strip()
         return {"device": self.device, "locale": locale, "sdk": sdk}
 
+    def ensure_locale(self, target_locale):
+        """Asegura que el idioma principal del emulador coincida con `target_locale` (ej. 'es-AR' o 'en-US')."""
+        if not target_locale:
+            return None
+        cur = self.run(["shell", "getprop", "persist.sys.locale"], check=False).strip()
+        if not cur:
+            cur = self.run(["shell", "settings", "get", "system", "system_locales"], check=False).strip().split(",")[0]
+        if cur.lower().startswith(target_locale.lower()[:2]):
+            return cur
+        print("      [locale] cambiando idioma del emulador de '%s' a '%s'..." % (cur or "?", target_locale))
+        self.talkback_off()
+        self.run(["shell", "am", "start", "-a", "android.settings.LOCALE_SETTINGS"], check=False)
+        time.sleep(2.0)
+        nodes = self.dump_nodes()
+        menu_btns = [
+            n
+            for n in nodes
+            if (n.get("rid") or "").endswith("settingslib_menu_button") and n.get("bounds")
+        ]
+        if len(menu_btns) >= 2:
+            b = menu_btns[1]["bounds"]
+            self.tap((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+            time.sleep(1.2)
+            nodes2 = self.dump_nodes()
+            move_up = [
+                n
+                for n in nodes2
+                if any(
+                    w in ((n.get("text") or "") + " " + (n.get("desc") or "")).lower()
+                    for w in ("arriba", "move up")
+                )
+                and n.get("bounds")
+            ]
+            if move_up:
+                mb = move_up[0]["bounds"]
+                self.tap((mb[0] + mb[2]) // 2, (mb[1] + mb[3]) // 2)
+            else:
+                self.tap(966, 1270)
+            time.sleep(1.5)
+            nodes3 = self.dump_nodes()
+            ok_btn = [
+                n
+                for n in nodes3
+                if (n.get("rid") or "").endswith("button1") and n.get("bounds")
+            ]
+            if ok_btn:
+                ob = ok_btn[0]["bounds"]
+                self.tap((ob[0] + ob[2]) // 2, (ob[1] + ob[3]) // 2)
+                time.sleep(2.5)
+        self.run(["shell", "am", "force-stop", "com.android.settings"], check=False)
+        self.run(["shell", "am", "force-stop", "com.google.android.marvin.talkback"], check=False)
+        new_loc = self.run(["shell", "getprop", "persist.sys.locale"], check=False).strip()
+        print("      [locale] idioma activo -> %s" % (new_loc or target_locale))
+        return new_loc or target_locale
+
     def talkback_on(self):
         self.run(["shell", "settings", "put", "secure", "enabled_accessibility_services", TALKBACK_SVC])
         self.run(["shell", "settings", "put", "secure", "accessibility_enabled", "1"])
@@ -356,7 +411,7 @@ class AdbClient:
         pkg_hint = self._extract_apk_package_host(apk_abs)
         print("      [apk] instalando %s ..." % os.path.basename(apk_abs))
         subprocess.run(
-            [self.adb, "-s", self.device, "install", "-r", apk_abs],
+            [self.adb_bin, "-s", self.device, "install", "-r", apk_abs],
             check=True,
             timeout=180,
         )
@@ -369,6 +424,33 @@ class AdbClient:
             print("      [apk] APK instalado (usa --list-apps para ver el paquete)")
         return pkg
 
+    def dismiss_system_dialogs(self, rounds=3):
+        """Cierra diálogos nativos iniciales del sistema Android tras instalar un APK
+        (aviso de compatibilidad 16 KB page size y permisos de notificaciones en primer arranque)."""
+        for _ in range(rounds):
+            fg_pkg, fg_act = self.get_foreground_package()
+            if fg_pkg not in ("android", "com.google.android.permissioncontroller", "com.android.permissioncontroller"):
+                break
+            nodes = self.dump_nodes()
+            btn = [
+                n
+                for n in nodes
+                if n.get("bounds")
+                and (
+                    (n.get("rid") or "").endswith("permission_allow_button")
+                    or (n.get("rid") or "").endswith("button1")
+                    or any(
+                        w in (n.get("text") or "").lower()
+                        for w in ("no volver a mostrar", "don't show again", "permitir", "allow", "aceptar", "ok")
+                    )
+                )
+            ]
+            if not btn:
+                break
+            b = btn[0]["bounds"]
+            self.tap((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+            time.sleep(1.5)
+
     def ensure_app_foreground(self, app_pkg):
         if not app_pkg:
             return
@@ -378,4 +460,5 @@ class AdbClient:
                 ["shell", "monkey", "-p", app_pkg, "-c", "android.intent.category.LAUNCHER", "1"],
                 check=False,
             )
-            time.sleep(2)
+            time.sleep(2.5)
+            self.dismiss_system_dialogs()

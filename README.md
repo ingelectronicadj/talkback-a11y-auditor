@@ -1,4 +1,4 @@
-# TalkBack Audit (`v0.2.2`)
+# TalkBack Audit (`v0.2.3`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 
@@ -84,6 +84,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 | `--apk APK_FILE` | Instala un archivo `.apk` en el emulador, extrae su `packageName` y lo abre para auditarlo | - |
 | `--init` | Asistente interactivo para elegir una app instalada o instalar un `.apk` y guardar `config.local.json` | - |
 | `--pkg PACKAGE` | Paquete Android de la aplicación bajo prueba (si se omite, detecta la app en primer plano) | Auto / Config |
+| `--locale BCP47` | Cambia automáticamente el idioma del emulador y reinicia TalkBack antes de auditar (ej. `es-AR`, `en-US`) | Según perfil |
 | `--view VIEW_ID` | Ejecuta el perfil declarativo de una vista (`config['views'][VIEW_ID]`) o `all` para correr todas en secuencia | - |
 | `--view-title TITLE` | Título descriptivo de la vista para el `<title>` de pestaña y el banner de cabecera del reporte | Auto (`<h1>`) |
 | `--device SERIAL` | Serial ADB del dispositivo o emulador (`ANDROID_SERIAL`) | `emulator-5554` |
