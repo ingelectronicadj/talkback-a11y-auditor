@@ -4,6 +4,7 @@ import json
 import os
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROFILES_DIR = os.path.join(SCRIPT_DIR, "profiles")
 LOCAL_CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.local.json")
 
 TALKBACK_SVC = "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService"
@@ -92,11 +93,37 @@ def _deep_merge(base, override):
     return base
 
 
-def load_config(config_path=None, user_id=None, core_user_id=None, sso_token=None, app_pkg=None):
-    """Carga configuración combinando defaults agnósticos, `config.local.json` (si existe),
-    archivo `--config` opcional y argumentos de línea de comandos."""
+def resolve_profile_path(profile_or_path=None):
+    """Resuelve un nombre de perfil (ej. 'crypto_arg' -> 'profiles/crypto_arg.local.json')
+    o ruta de configuración explícita."""
+    if profile_or_path:
+        if os.path.exists(profile_or_path):
+            return profile_or_path
+        cand1 = os.path.join(PROFILES_DIR, "%s.local.json" % profile_or_path)
+        if os.path.exists(cand1):
+            return cand1
+        cand2 = os.path.join(PROFILES_DIR, "%s.json" % profile_or_path)
+        if os.path.exists(cand2):
+            return cand2
+        return profile_or_path
+    if os.path.exists(LOCAL_CONFIG_PATH):
+        return LOCAL_CONFIG_PATH
+    if os.path.isdir(PROFILES_DIR):
+        locals_found = sorted(
+            os.path.join(PROFILES_DIR, fn)
+            for fn in os.listdir(PROFILES_DIR)
+            if fn.endswith(".local.json")
+        )
+        if locals_found:
+            return locals_found[0]
+    return None
+
+
+def load_config(config_path=None, user_id=None, core_user_id=None, sso_token=None, app_pkg=None, profile=None):
+    """Carga configuración combinando defaults agnósticos, `profiles/<name>.local.json` o `config.local.json`,
+    archivo `--config` / `--profile` opcional y argumentos de línea de comandos."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
-    target_cfg = config_path if config_path else (LOCAL_CONFIG_PATH if os.path.exists(LOCAL_CONFIG_PATH) else None)
+    target_cfg = resolve_profile_path(profile or config_path)
     if target_cfg and os.path.exists(target_cfg):
         try:
             with open(target_cfg, "r", encoding="utf-8") as f:

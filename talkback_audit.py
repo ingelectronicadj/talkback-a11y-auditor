@@ -486,6 +486,12 @@ def _run_init_wizard(adb_client, cfg):
 def main():
     ap = argparse.ArgumentParser(description="Auditoría TalkBack con reporte visual (v%s)" % VERSION)
     ap.add_argument("--version", action="version", version="talkback_audit %s" % VERSION)
+    ap.add_argument(
+        "--profile",
+        "-p",
+        metavar="NAME",
+        help="nombre del perfil en profiles/<NAME>.local.json (ej. crypto_arg, crypto_producto_qa)",
+    )
     ap.add_argument("--config", metavar="FILE", help="archivo JSON de configuración opcional")
     ap.add_argument("--self-test", action="store_true", help="ejecuta autovalidación interna sin emulador y sale")
     ap.add_argument("--list-apps", action="store_true", help="lista las apps instaladas en el emulador (marcando la activa en pantalla) y sale")
@@ -576,7 +582,11 @@ def main():
         return
 
     cfg = load_config(
-        args.config, user_id=args.user, core_user_id=args.core_user_id, app_pkg=args.pkg
+        args.config,
+        user_id=args.user,
+        core_user_id=args.core_user_id,
+        app_pkg=args.pkg,
+        profile=args.profile,
     )
     if args.device:
         cfg["device"] = args.device
@@ -678,6 +688,8 @@ def main():
             else v_spec.get("out")
             or os.path.join(
                 os.getcwd(),
+                "reportes",
+                "adhoc",
                 "talkback_report_%s" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
             )
         )

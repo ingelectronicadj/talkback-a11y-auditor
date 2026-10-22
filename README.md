@@ -1,4 +1,4 @@
-# TalkBack Audit (`v0.3.0`)
+# TalkBack Audit (`v0.3.1`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 
@@ -79,17 +79,18 @@ python3 talkback_audit.py --stop-talkback --setup-only
 | Opción | Descripción | Valor por defecto |
 |---|---|---|
 | `--version` | Muestra la versión instalada y termina | - |
-| `--self-test` | Valida sin emulador los 86 criterios WCAG 2.2, las 14 reglas `TB-*` y el generador HTML | - |
+| `--self-test` | Valida sin emulador los 86 criterios WCAG 2.2, las 16 reglas `TB-*` y el generador HTML | - |
 | `--list-apps` | Lista todas las apps de usuario instaladas en el emulador y marca cuál está activa en pantalla | - |
 | `--apk APK_FILE` | Instala un archivo `.apk` en el emulador, extrae su `packageName` y lo abre para auditarlo | - |
 | `--init` | Asistente interactivo para elegir una app instalada o instalar un `.apk` y guardar `config.local.json` | - |
+| `--profile NAME`, `-p` | Carga el perfil `profiles/<NAME>.local.json` (ej. `--profile crypto_arg`) | Auto |
 | `--pkg PACKAGE` | Paquete Android de la aplicación bajo prueba (si se omite, detecta la app en primer plano) | Auto / Config |
 | `--locale BCP47` | Cambia automáticamente el idioma del emulador y reinicia TalkBack antes de auditar (ej. `es-AR`, `en-US`) | Según perfil |
 | `--view VIEW_ID` | Ejecuta el perfil declarativo de una vista (`config['views'][VIEW_ID]`) o `all` para correr todas en secuencia | - |
 | `--view-title TITLE` | Título descriptivo de la vista para el `<title>` de pestaña y el banner de cabecera del reporte | Auto (`<h1>`) |
 | `--device SERIAL` | Serial ADB del dispositivo o emulador (`ANDROID_SERIAL`) | `emulator-5554` |
 | `--avd NAME` | Nombre del AVD a iniciar automáticamente si no hay emulador activo | Primer AVD detectado |
-| `--config FILE` | Archivo JSON de configuración personalizada | `config.local.json` |
+| `--config FILE` | Archivo JSON de configuración personalizada | `profiles/*.local.json` |
 | `--mode {swipe,alt,tab,dpad}` | Modo de avance: `swipe` (gesto nativo TalkBack vía QEMU), `alt` (`Alt+→`), `tab` (`Tab`), `dpad` (`↓`) | `swipe` |
 | `--steps N` | Número máximo de pasos en barrido automático | `80` |
 | `--delay SECS` | Espera entre pasos para permitir que TalkBack actualice foco y subtítulo | `1.4` |
@@ -113,21 +114,23 @@ python3 talkback_audit.py --stop-talkback --setup-only
 .
 ├── talkback_audit.py          # Entrypoint CLI, orquestador de barrido y modo --self-test
 ├── tb_ocr.swift               # OCR nativo sobre Vision.framework con filtro de píxeles para subtítulos
-├── config.example.json        # Plantilla de configuración (copiar a config.local.json)
+├── config.example.json        # Plantilla de configuración (copiar a profiles/<app>.local.json)
+├── profiles/                  # Perfiles locales por app/entorno (*.local.json ignorados en git)
+├── reportes/                  # Salidas organizadas por aplicación/proyecto (ignoradas en git)
 ├── CHANGELOG.md               # Historial de cambios por versión
 ├── tb_audit/
-│   ├── __init__.py            # Versión del paquete (VERSION = "0.2.0")
-│   ├── config.py              # Carga de configuración jerárquica (defaults -> config.local.json -> CLI)
-│   ├── adb_client.py          # Cliente ADB, arranque de AVD, preflight y gestos QEMU (emu_swipe)
+│   ├── __init__.py            # Versión del paquete (VERSION = "0.3.1")
+│   ├── config.py              # Carga de configuración jerárquica (defaults -> profiles/*.local.json -> CLI)
+│   ├── adb_client.py          # Cliente ADB, arranque de AVD, locale, preflight y gestos QEMU (emu_swipe)
 │   ├── vision.py              # Detección de foco verde, barra de subtítulos, skeletons y OCR
 │   ├── cdp.py                 # Inspector WebView DOM / ARIA e IndexedDB vía Chrome DevTools Protocol
-│   ├── wcag_catalog.py        # Taxonomía oficial WCAG 2.2 (86 criterios) y catálogo de 14 reglas TB-*
-│   ├── rules.py               # Motor de heurísticas por nodo, texto y secuencia (Focus Return, Charts)
-│   ├── report.py              # Generador de steps.json y reporte HTML interactivo con snippets limpios
+│   ├── wcag_catalog.py        # Taxonomía oficial WCAG 2.2 (86 criterios) y catálogo de 16 reglas TB-*
+│   ├── rules.py               # Motor de heurísticas por nodo, texto, secuencia, encabezados y omitidos
+│   ├── report.py              # Generador de steps.json, reporte HTML interactivo e índice/ZIP de suite
 │   └── sso.py                 # Hook opcional de autenticación pre-prueba y keep-alive en background
 └── docs/
     ├── architecture.md                # Arquitectura interna, gestos QEMU, OCR y conexión CDP
-    ├── wcag-rules-catalog.md          # Catálogo detallado de las 14 reglas TB-* y criterios WCAG 2.2
+    ├── wcag-rules-catalog.md          # Catálogo detallado de las 16 reglas TB-* y criterios WCAG 2.2
     ├── configuration-and-profiles.md  # Configuración para cualquier app, WebViews, i18n y Jira
     └── troubleshooting-talkback-android.md # Guía de resolución de problemas con TalkBack en emuladores
 ```

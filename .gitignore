@@ -15,6 +15,7 @@ tb_ocr
 .env.*
 config.local.json
 *.local.json
+profiles/*.local.json
 crypto_sso_helper.py
 
 # Reportes y capturas generadas en ejecuciones

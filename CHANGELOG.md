@@ -2,6 +2,13 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.3.1] - 2026-10-22
+
+### Añadido
+- **Organización multi-app por perfiles (`profiles/<nombre>.local.json`) y flag `--profile` / `-p`**:
+  - `resolve_profile_path()` en `tb_audit/config.py` permite organizar múltiples aplicaciones o entornos en `profiles/<app>.local.json` e invocarlos con `--profile <app>` (manteniendo compatibilidad con `--config`).
+  - Salida por defecto para corridas sin `--out` movida a `reportes/adhoc/talkback_report_<timestamp>` para mantener limpia la raíz del proyecto.
+
 ## [0.3.0] - 2026-10-22
 
 ### Añadido
