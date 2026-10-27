@@ -231,6 +231,11 @@ DOM_EXTRACT_JS = r"""
       }
     }
     const keyMeta = resolveKeyMeta(label, ariaLabel, testId);
+    const r = el.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const rect = (r && r.width > 0 && r.height > 0)
+      ? [Math.round(r.left * dpr), Math.round(r.top * dpr), Math.round(r.right * dpr), Math.round(r.bottom * dpr)]
+      : null;
     out.push({
       tag,
       selector: sel,
@@ -242,6 +247,7 @@ DOM_EXTRACT_JS = r"""
       ariaHidden,
       ariaLive,
       tabindex,
+      rect,
       label: label.slice(0, 220),
       poeditorKey: keyMeta ? keyMeta.key : '',
       poeditorOrigin: keyMeta ? keyMeta.origin : '',
@@ -310,9 +316,17 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222):
     ws_path = _connect_cdp_ws(adb_client, port=port)
     if not ws_path:
         return
+    _ws_eval(
+        port,
+        ws_path,
+        "(() => { try { if (document.activeElement) document.activeElement.blur(); window.scrollTo(0, 0); } catch(e){} return 'ok'; })()",
+    )
     for st in cdp_steps:
         if st.get("hash"):
-            js = "location.hash = %s; 'ok'" % json.dumps(st["hash"])
+            js = (
+                "(() => { try { if (document.activeElement) document.activeElement.blur(); } catch(e){} location.hash = %s; return 'ok'; })()"
+                % json.dumps(st["hash"])
+            )
             _ws_eval(port, ws_path, js)
         elif st.get("click"):
             sel = json.dumps(st["click"])
@@ -334,6 +348,11 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222):
         wait_s = float(st.get("wait_sec", 2.0))
         if wait_s > 0:
             time.sleep(wait_s)
+    _ws_eval(
+        port,
+        ws_path,
+        "(() => { try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch(e){} return 'ok'; })()",
+    )
 
 
 def capture_webview_dom(adb_client, port=9222):
@@ -363,8 +382,8 @@ def _strip_tb_role_suffix(text):
     return s.strip()
 
 
-def match_dom_element(utterance, label, dom_snapshot):
-    """Correlaciona el anuncio de TalkBack con el elemento DOM real del WebView."""
+def match_dom_element(utterance, label, dom_snapshot, box=None):
+    """Correlaciona el anuncio de TalkBack con el elemento DOM real del WebView (por texto y por geometría de foco)."""
     if not dom_snapshot or not dom_snapshot.get("elements"):
         return None
     elements = dom_snapshot["elements"]
@@ -373,9 +392,13 @@ def match_dom_element(utterance, label, dom_snapshot):
         for el in elements:
             if el["tag"] == "svg" and el["testId"].startswith("line-chart"):
                 return el
-    if "signo de dólar" in u_raw or "dollar sign" in u_raw:
+    if "signo de dólar" in u_raw or "dollar sign" in u_raw or u_raw.strip() == "euro":
         for el in elements:
-            if el.get("id") == "inputCurrencyAffix" or el.get("label", "").strip() == "$":
+            if el.get("id") == "inputCurrencyAffix" or el.get("label", "").strip() in ("$", "€"):
+                return el
+    if u_raw.strip() in ("o btc", "0 btc"):
+        for el in elements:
+            if "0 btc" in (el.get("label") or "").lower():
                 return el
     if "detected: text" in u_raw or "etected: text" in u_raw or "texto detectado" in u_raw:
         for el in elements:
@@ -385,15 +408,45 @@ def match_dom_element(utterance, label, dom_snapshot):
         for el in elements:
             if el["role"] == "status" or el["ariaLive"]:
                 return el
+    if re.search(r"^(double-tap to activate|tocar dos veces para activar|toc[aá] dos veces para activar)$", u_raw.strip()):
+        if box and len(box) == 4:
+            bx1, by1, bx2, by2 = box
+            bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+            best_geo = None
+            for el in elements:
+                r = el.get("rect")
+                if r and len(r) == 4 and el.get("tag") in ("button", "a", "input"):
+                    rcx, rcy = (r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0
+                    dist = abs(bcx - rcx) + abs(bcy - rcy)
+                    if best_geo is None or dist < best_geo[0]:
+                        best_geo = (dist, el)
+            if best_geo and best_geo[0] < 380:
+                return best_geo[1]
+        for el in reversed(elements):
+            if el.get("tag") == "button" and el.get("ariaLabel") and "order" in el["ariaLabel"].lower():
+                return el
     has_interactive_role = bool(
         re.search(
-            r"\b(bot[oó]n|button|v[ií]nculo|link|edici[oó]n|edit box|opci[oó]n|pestaña|tab)\b",
+            r"\b(bot[oó]n|button|v[ií]nculo|link|edici[oó]n|edit box|opci[oó]n|pestaña|tab|radio)\b",
             u_raw,
         )
     )
     cleaned = _strip_tb_role_suffix(utterance or label)
     utt_n = norm_utt(cleaned) or norm_utt(utterance or label)
     if not utt_n or len(utt_n) < 2:
+        if box and len(box) == 4:
+            bx1, by1, bx2, by2 = box
+            bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+            best_geo = None
+            for el in elements:
+                r = el.get("rect")
+                if r and len(r) == 4 and el.get("tag") not in ("main", "div"):
+                    rcx, rcy = (r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0
+                    dist = abs(bcx - rcx) + abs(bcy - rcy)
+                    if best_geo is None or dist < best_geo[0]:
+                        best_geo = (dist, el)
+            if best_geo and best_geo[0] < 240:
+                return best_geo[1]
         return None
     best = None
     for el in elements:

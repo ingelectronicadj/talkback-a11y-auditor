@@ -423,7 +423,20 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                 target_s["seq_issues"].append(msg)
     for s in steps:
         if not s.get("dom") and dom_snapshot:
-            s["dom"] = match_dom_element(s.get("utterance"), s.get("label"), dom_snapshot)
+            s["dom"] = match_dom_element(s.get("utterance"), s.get("label"), dom_snapshot, box=s.get("box"))
+        dom_el = s.get("dom")
+        if dom_el and not s.get("label"):
+            s["label"] = dom_el.get("label") or dom_el.get("ariaLabel") or ""
+        if dom_el:
+            dlbl = (dom_el.get("label") or "").strip()
+            sutt = (s.get("utterance") or "").strip()
+            # Detectar truncamiento de unidad/ticker monetario (ej. '0.03377028 BTC' leído solo como '0.03377028')
+            m_tk = re.match(r"^([0-9.,]+)\s+([A-Z]{3,5})$", dlbl)
+            if m_tk and sutt == m_tk.group(1):
+                s.setdefault("seq_issues", []).append(
+                    "Información y relaciones (WCAG 1.3.1 / 3.3.2): TalkBack anuncia únicamente la cifra («%s») omitiendo la unidad/activo («%s») presente en el DOM"
+                    % (sutt, m_tk.group(2))
+                )
     resolved_view = _resolve_view_info(steps, dom_snapshot, view_info)
     save_steps_json(
         steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=resolved_view

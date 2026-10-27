@@ -1,4 +1,4 @@
-# TalkBack Audit (`v0.3.1`)
+# TalkBack Audit (`v0.4.0`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 

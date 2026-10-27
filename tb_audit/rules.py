@@ -122,11 +122,11 @@ def text_a11y_issues(text, expected_locale="es"):
             % text[:80]
         )
     elif exp_en and re.search(
-        r"\b(en el complejo ecosistema|en el actual ecosistema|descripci[oó]n corta|pendiente del equipo)\b",
+        r"\b(en el complejo ecosistema|en el actual ecosistema|descripci[oó]n corta|pendiente del equipo|trading volumen)\b",
         low,
     ):
         issues.append(
-            "Tropicalización / i18n (WCAG 3.1.2): texto en español sin traducir expuesto en vista en inglés («%s»)"
+            "Tropicalización / i18n (WCAG 3.1.2): texto en español o errata sin traducir expuesto en vista en inglés («%s»)"
             % text[:80]
         )
     if re.search(r"\b[uú]ltimas\s+ordenes\b|\bultimas\s+[oó]rdenes\b", low):
@@ -287,6 +287,29 @@ def analyze_sequence_issues(steps):
             pre_modal_step = s["i"]
         if nu:
             prev_norm = nu
+
+    # Detectar doble parada en píldoras radio ('€10' seguido de 'Not checked. In group... €10. Radio button')
+    # e inversión de orden de foco horizontal en barras de acciones
+    for idx in range(1, len(steps)):
+        prev_s = steps[idx - 1]
+        cur_s = steps[idx]
+        u1 = (prev_s.get("utterance") or "").strip().lower()
+        u2 = (cur_s.get("utterance") or "").strip().lower()
+        if u1 and "radio" in u2 and u1 in u2 and "radio" not in u1:
+            cur_s.setdefault("seq_issues", []).append(
+                "Contenedor fusionado (WCAG 1.3.2 / 4.1.2): píldora de selección rápida genera 2 paradas separadas en TalkBack (primero texto estático «%s» y luego el input «%s»)"
+                % ((prev_s.get("utterance") or "")[:30], (cur_s.get("utterance") or "")[:55])
+            )
+        b1 = prev_s.get("box")
+        b2 = cur_s.get("box")
+        if b1 and b2 and len(b1) == 4 and len(b2) == 4:
+            cy1 = (b1[1] + b1[3]) / 2.0
+            cy2 = (b2[1] + b2[3]) / 2.0
+            if abs(cy1 - cy2) <= 55 and cy1 > 2000 and (b2[2] < b1[0] - 40):
+                cur_s.setdefault("seq_issues", []).append(
+                    "Gestión de foco / Focus Return (WCAG 2.4.3): orden de foco invertido respecto al layout visual (enfoca primero «%s» a la derecha y luego «%s» a la izquierda)"
+                    % ((prev_s.get("label") or prev_s.get("utterance") or "")[:35], (cur_s.get("label") or cur_s.get("utterance") or "")[:35])
+                )
 
 
 def analyze_heading_hierarchy(dom_snapshot, steps):

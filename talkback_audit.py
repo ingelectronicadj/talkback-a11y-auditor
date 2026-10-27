@@ -24,6 +24,7 @@ import time
 from tb_audit import VERSION
 from tb_audit.adb_client import AdbClient
 from tb_audit.cdp import capture_webview_dom, match_dom_element, run_cdp_steps
+from tb_audit.compare import build_comparison_suite
 from tb_audit.config import LOCAL_CONFIG_PATH, load_config
 from tb_audit.report import build_report, build_suite_index, rebuild_report
 from tb_audit.rules import (
@@ -179,7 +180,19 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
         step_num += 1
         i = step_num
         adb_client.nav(args.mode, args.backward)
-        time.sleep(args.delay)
+        early_utt = ""
+        if ocr_bin and args.delay >= 1.0:
+            time.sleep(0.55)
+            early_png = os.path.join(out_dir, "img", "_early.png")
+            try:
+                adb_client.screencap_png(early_png)
+                e_info = ocr_step_info(ocr_bin, early_png, None)
+                early_utt = (e_info.get("utterance") or "").strip()
+            except Exception:
+                early_utt = ""
+            time.sleep(max(0.2, args.delay - 0.55))
+        else:
+            time.sleep(args.delay)
         adb_client.close_keyboard()
         png = os.path.join(out_dir, "img", "step_%03d.png" % i)
         try:
@@ -223,10 +236,18 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
                 pass
             print("      fin de la vista alcanzado (%r) en paso %d" % (utt, i - 1))
             break
+        if re.search(
+            r"^(double-tap to activate|tocar dos veces para activar|toc[aá] dos veces para activar)$",
+            (utt or "").strip().lower(),
+        ) and early_utt and not re.search(
+            r"^(double-tap to activate|tocar dos veces para activar|toc[aá] dos veces para activar)$",
+            early_utt.lower(),
+        ):
+            utt = "%s. %s" % (early_utt, utt)
         node = match_node(box, nodes0, utterance=utt)
         if node:
             visited.add(node_key(node))
-        dom_el = match_dom_element(utt, "", dom_snapshot) if dom_snapshot else None
+        dom_el = match_dom_element(utt, "", dom_snapshot, box=box) if dom_snapshot else None
         lbl = (effective_label(node, nodes0) if node else "") or (dom_el.get("label", "") if dom_el else "")
         sig = (box, utt or info["raw_caption"] or None, info["is_skeleton"])
         if sig and sig == prev_sig:
@@ -574,11 +595,22 @@ def main():
         metavar="ZIP_FILE",
         help="genera index.html maestro y empaqueta los reportes de la suite en un archivo .zip autocontenido",
     )
+    ap.add_argument(
+        "--compare",
+        nargs=2,
+        metavar=("IOS_DIR", "ANDROID_DIR"),
+        help="genera un reporte HTML comparativo lado a lado entre una vista/suite iOS VoiceOver y Android TalkBack",
+    )
     ap.add_argument("--rebuild", metavar="DIR", help="regenera report.html de una corrida previa (re-OCR capturas)")
     args = ap.parse_args()
 
     if args.self_test:
         run_self_test()
+        return
+
+    if args.compare:
+        out_cmp = build_comparison_suite(args.compare[0], args.compare[1], out_path=args.out)
+        print("Reporte comparativo: %s" % out_cmp)
         return
 
     cfg = load_config(
@@ -713,10 +745,10 @@ def main():
             adb_client.set_network_delay(args.net_delay)
 
         print("      capturando árbol accesible inicial...")
-        nodes0 = adb_client.dump_nodes() if did_off else []
-        last_nodes = nodes0
         dom_snapshot = capture_webview_dom(adb_client)
-        if did_off or not v_spec:
+        nodes0 = adb_client.dump_nodes() if (did_off and not dom_snapshot) else []
+        last_nodes = nodes0
+        if not args.no_setup:
             adb_client.talkback_on()
             time.sleep(2.5)
         if dom_snapshot:

@@ -2,6 +2,20 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.4.0] - 2026-10-27
+
+### Añadido
+- **Comparador multiplataforma iOS VoiceOver vs Android TalkBack (`--compare`, `tb_audit/compare.py`)**:
+  - Genera reportes HTML lado a lado (`comparison_ios_vs_android.html` y `comparison_index.html`) cruzando cada paso y selector DOM entre `WKWebView` (WebKit) y `Android WebView` (Chromium).
+- **Verificación de enlace activo de `TalkBackService` y aislamiento de `uiautomator` (`tb_audit/adb_client.py`, `talkback_audit.py`)**:
+  - `talkback_on()` verifica en `dumpsys accessibility` que `TalkBack` esté dentro de `Bound services:{...}`, forzando un ciclo `0 -> 1` si `uiautomator` lo desconectó.
+  - Cuando existe un `WebView` con socket CDP activo, omite `uiautomator dump` para evitar desconexiones del servicio de accesibilidad.
+- **Muestreo temprano de subtítulos y correlación DOM geométrica (`talkback_audit.py`, `tb_audit/cdp.py`)**:
+  - Toma una lectura temprana a los `0.55s` tras cada swipe para conservar el nombre del control cuando la barra de subtítulos rota al hint `"Double-tap to activate"`.
+  - Exporta `rect` (`getBoundingClientRect` escalado por `devicePixelRatio`) en `DOM_EXTRACT_JS` y lo usa como respaldo geométrico en `match_dom_element()`.
+- **Nuevas heurísticas WCAG (`tb_audit/rules.py`, `tb_audit/report.py`)**:
+  - Detección de doble parada en píldoras radio, inversión de orden de foco horizontal en barra de acciones y truncamiento de unidades/tickers monetarios respecto al DOM.
+
 ## [0.3.1] - 2026-10-22
 
 ### Añadido

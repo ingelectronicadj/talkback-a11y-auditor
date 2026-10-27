@@ -164,6 +164,12 @@ class AdbClient:
     def talkback_on(self):
         self.run(["shell", "settings", "put", "secure", "enabled_accessibility_services", TALKBACK_SVC])
         self.run(["shell", "settings", "put", "secure", "accessibility_enabled", "1"])
+        dump = self.run(["shell", "dumpsys", "accessibility"], check=False)
+        if "Bound services:{Service[" not in dump and "TalkBack" not in dump.split("Bound services:")[-1][:300]:
+            self.talkback_off()
+            time.sleep(0.9)
+            self.run(["shell", "settings", "put", "secure", "enabled_accessibility_services", TALKBACK_SVC])
+            self.run(["shell", "settings", "put", "secure", "accessibility_enabled", "1"])
 
     def talkback_off(self):
         self.run(["shell", "settings", "delete", "secure", "enabled_accessibility_services"], check=False)
