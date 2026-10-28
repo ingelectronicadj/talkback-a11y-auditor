@@ -2,6 +2,17 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.5.0] - 2026-10-28
+
+### Añadido
+- **Reglas W3C ACCNAME 1.2 para `aria-label` anidado en `<span>` sin `role` y detección de sufijos duplicados (`tb_audit/cdp.py`, `tb_audit/rules.py`, `tb_audit/report.py`)**:
+  - Detecta controles `<button>` / `<a>` sin nombre accesible cuyo `aria-label` fue colocado en un `<span>` o `<div>` hijo sin `role`.
+  - Detecta etiquetas `aria-label` que repiten al final un importe o unidad ya anunciado al inicio de la etiqueta.
+- **Clasificador agnóstico de capa de origen en snippets DOM (`tb_audit/cdp.py`)**:
+  - Distingue automáticamente entre `Origen: Diccionario i18n`, `Origen: Componente de Librería UI (Design System)` y `Origen: Código Front-End de la Vista`.
+- **Comparador Tripartito Multiplataforma (`tb_audit/compare.py`)**:
+  - Soporta comparar 2 o 3 plataformas simultáneamente (`Web Desktop NVDA` vs `Android TalkBack` vs `iOS VoiceOver`) auto-detectando cada plataforma desde `steps.json`.
+
 ## [0.4.0] - 2026-10-27
 
 ### Añadido

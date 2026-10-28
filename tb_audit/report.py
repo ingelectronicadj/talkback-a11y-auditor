@@ -425,6 +425,17 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
         if not s.get("dom") and dom_snapshot:
             s["dom"] = match_dom_element(s.get("utterance"), s.get("label"), dom_snapshot, box=s.get("box"))
         dom_el = s.get("dom")
+        if dom_el and (dom_el.get("tag") or "").lower() == "input":
+            sutt_low = (s.get("utterance") or "").strip().lower()
+            if re.search(r"current investment[.\s·]*(edit box|casilla)?$", sutt_low):
+                msg = (
+                    "Tropicalización / i18n (WCAG 3.3.2 / 4.1.2): etiqueta accesible del campo de importe («%s») omite interpolar el saldo/inversión disponible para operar"
+                    % (s.get("utterance") or "")[:65]
+                )
+                s.setdefault("seq_issues", [])
+                if msg not in s["seq_issues"]:
+                    s["seq_issues"].append(msg)
+        dom_el = s.get("dom")
         if dom_el and not s.get("label"):
             s["label"] = dom_el.get("label") or dom_el.get("ariaLabel") or ""
         if dom_el:
@@ -437,6 +448,22 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                     "Información y relaciones (WCAG 1.3.1 / 3.3.2): TalkBack anuncia únicamente la cifra («%s») omitiendo la unidad/activo («%s») presente en el DOM"
                     % (sutt, m_tk.group(2))
                 )
+    if isinstance(dom_snapshot, dict):
+        for el in dom_snapshot.get("elements", []):
+            nsa = (el.get("nestedSpanAria") or "").strip()
+            if nsa and steps:
+                msg = (
+                    "Nombre accesible (WCAG 4.1.2): <%s> (%s) carece de aria-label propio y anida aria-label=«%s» en un <span> hijo sin role (ignorado por W3C ACCNAME)"
+                    % (el.get("tag") or "button", el.get("selector") or "button", nsa[:55])
+                )
+                target_st = steps[-1]
+                for st_cand in steps:
+                    if el.get("selector") and (st_cand.get("dom") or {}).get("selector") == el.get("selector"):
+                        target_st = st_cand
+                        break
+                target_st.setdefault("seq_issues", [])
+                if msg not in target_st["seq_issues"]:
+                    target_st["seq_issues"].append(msg)
     resolved_view = _resolve_view_info(steps, dom_snapshot, view_info)
     save_steps_json(
         steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=resolved_view
@@ -461,7 +488,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
         elif "locale en" in (meta or "").lower():
             exp_loc = "en"
         if node:
-            for it in node_issues(node):
+            for it in node_issues(node, expected_locale=exp_loc):
                 if it not in issues:
                     issues.append(it)
         for txt in (label, utt):
@@ -1006,7 +1033,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
             continue
         label = (n.get("desc") or n.get("text") or "").strip() or "(control sin etiqueta)"
         reached = node_key(n) in visited
-        its = node_issues(n)
+        its = node_issues(n, expected_locale=exp_loc)
         if reached:
             st_cls, st_txt = "ok", "visitado"
         elif n.get("focusable") or n.get("clickable"):

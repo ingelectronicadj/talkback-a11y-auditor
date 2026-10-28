@@ -250,7 +250,8 @@ DOM_EXTRACT_JS = r"""
       rect,
       label: label.slice(0, 220),
       poeditorKey: keyMeta ? keyMeta.key : '',
-      poeditorOrigin: keyMeta ? keyMeta.origin : '',
+      poeditorOrigin: keyMeta ? keyMeta.origin : (hasUiLibAttr ? 'Origen: Componente de Librería UI (Design System)' : 'Origen: Código Front-End de la Vista'),
+      nestedSpanAria,
       html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 300)
     });
   }

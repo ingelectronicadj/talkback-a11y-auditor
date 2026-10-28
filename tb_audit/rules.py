@@ -78,6 +78,15 @@ def text_a11y_issues(text, expected_locale="es"):
     for sym, note in CURRENCY_NOTES.items():
         if sym != "$" and sym != "€" and sym in text:
             issues.append("Moneda: " + note)
+    m_dup_val = re.search(
+        r"(?:available balance|saldo disponible|available titles|t[ií]tulos disponibles)\s+([€$£]?\s*\d+[.,]?\d*(?:\s+titles|\s+t[ií]tulos)?)\b.*\.\s*(?:\1|0\s+titles)\b",
+        text.lower(),
+    )
+    if m_dup_val:
+        issues.append(
+            "Encabezados y etiquetas (WCAG 2.4.6 / 4.1.2): la etiqueta accesible repite al final un importe o unidad ya anunciado («%s»)"
+            % text[:85]
+        )
     words = text.split()
     if len(words) >= 18:
         issues.append(
@@ -115,7 +124,7 @@ def text_a11y_issues(text, expected_locale="es"):
         r"associated account|available balance|you can change the associated account|"
         r"select your linked account|select an option|choose one account|"
         r"select the amount|change frequency|you can only select a",
-        low,
+        text.lower(),
     ):
         issues.append(
             "Tropicalización / i18n (WCAG 3.1.2): etiqueta accesible en inglés sin localizar en vista en español («%s»)"
@@ -123,7 +132,7 @@ def text_a11y_issues(text, expected_locale="es"):
         )
     elif exp_en and re.search(
         r"\b(en el complejo ecosistema|en el actual ecosistema|descripci[oó]n corta|pendiente del equipo|trading volumen)\b",
-        low,
+        text.lower(),
     ):
         issues.append(
             "Tropicalización / i18n (WCAG 3.1.2): texto en español o errata sin traducir expuesto en vista en inglés («%s»)"
@@ -141,7 +150,7 @@ def text_a11y_issues(text, expected_locale="es"):
         )
     if re.search(
         r"^\s*\(?(abrir una nueva ventana|open a new window)\)?[\s.·]*(v[ií]nculo|link)?\s*$",
-        low,
+        text.lower(),
     ):
         issues.append(
             "Propósito de los enlaces (WCAG 2.4.4): enlace sin texto de destino; anuncia únicamente «%s»"
@@ -153,7 +162,7 @@ def text_a11y_issues(text, expected_locale="es"):
         )
     if re.search(
         r"unlabelled|unlabeled|sin etiquetar|detected:\s*text|etected:\s*text|texto detectado",
-        low,
+        text.lower(),
     ):
         issues.append(
             "Contenido no textual (WCAG 1.1.1): imagen o gráfico sin atributo alt/aria-label (TalkBack anuncia 'Sin etiquetar. Imagen' / 'Unlabelled Image' o recurre a OCR)"
@@ -167,7 +176,7 @@ def node_issues(node):
     desc = (node.get("desc") or "").strip()
     label = desc or text_vis
     cls_short = (node.get("cls") or "").split(".")[-1]
-    issues.extend(text_a11y_issues(label))
+    issues.extend(text_a11y_issues(label, expected_locale=expected_locale))
     if any(cls_short.endswith(k) for k in ("ImageView", "ImageButton")) and not label:
         issues.append(
             "Contenido no textual (WCAG 1.1.1): imagen o icono sin texto alternativo (contentDescription)"
