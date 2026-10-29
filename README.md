@@ -1,4 +1,4 @@
-# TalkBack Audit (`v0.5.1`)
+# TalkBack Audit (`v0.6.0`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 
@@ -119,7 +119,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 ├── reportes/                  # Salidas organizadas por aplicación/proyecto (ignoradas en git)
 ├── CHANGELOG.md               # Historial de cambios por versión
 ├── tb_audit/
-│   ├── __init__.py            # Versión del paquete (VERSION = "0.5.1")
+│   ├── __init__.py            # Versión del paquete (VERSION = "0.6.0")
 │   ├── config.py              # Carga de configuración jerárquica (defaults -> profiles/*.local.json -> CLI)
 │   ├── adb_client.py          # Cliente ADB, arranque de AVD, locale, preflight y gestos QEMU (emu_swipe)
 │   ├── vision.py              # Detección de foco verde, barra de subtítulos, skeletons y OCR

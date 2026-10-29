@@ -2,6 +2,14 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.6.0] - 2026-10-29
+
+### Añadido
+- **Verificador y sincronizador de paquetes híbridos `--check-bundle` (`talkback_audit.py`, `tb_audit/adb_client.py`)**:
+  - Consulta el manifiesto remoto `versions.json` (`hybrid_cdn_url`), muestra versión, fecha `Last-Modified` y `checksum_zip`, y verifica el caché local en el emulador Android.
+- **Generador desplegable de plantilla de bug A11Y de 6 secciones en `report.html` y limpieza de atributos efímeros en snippets DOM (`tb_audit/report.py`)**.
+- **Regex unificado de versión de bundle híbrido (`tb_audit/cdp.py`)**.
+
 ## [0.5.1] - 2026-10-28
 
 ### Añadido

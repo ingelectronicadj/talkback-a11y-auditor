@@ -274,7 +274,7 @@ DOM_EXTRACT_JS = r"""
       html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 300)
     });
   }
-  const bMatch = location.href.match(/\/hybrid\/[^/]+\/([^/]+)\//);
+  const bMatch = location.href.match(/\/hybrid\/(?:packages\/)?[^/]+\/([^/]+)\//);
   const h1Text = (document.querySelector('h1')?.innerText || document.querySelector('h1')?.textContent || '').trim().replace(/\s+/g, ' ');
   return JSON.stringify({
     url: location.href,

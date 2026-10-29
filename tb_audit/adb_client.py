@@ -468,3 +468,32 @@ class AdbClient:
             )
             time.sleep(2.5)
             self.dismiss_system_dialogs()
+
+
+    def check_and_sync_hybrid_bundle(self, cfg, app_pkg=None, sync_to_device=True):
+        """Consulta versions.json del CDN híbrido (si está configurado en cfg['hybrid_cdn_url']) y sincroniza en el dispositivo."""
+        cdn_url = (cfg or {}).get("hybrid_cdn_url", "").strip()
+        if not cdn_url:
+            return None
+        import io, json, ssl, urllib.request, zipfile
+        ctx = ssl._create_unverified_context()
+        try:
+            req = urllib.request.Request(cdn_url)
+            res = urllib.request.urlopen(req, context=ctx, timeout=12)
+            last_mod = res.headers.get("Last-Modified", "")
+            data = json.loads(res.read().decode("utf-8"))
+            pkgs = data.get("packages") or []
+            pkg_info = pkgs[0] if pkgs else {}
+            ver = pkg_info.get("version") or data.get("version") or ""
+            chk = pkg_info.get("checksum_zip") or ""
+            feat = (cfg or {}).get("hybrid_feature", "crypto")
+            print(f"      [Bundle CDN] url={cdn_url} -> version={ver} | Last-Modified={last_mod} | sha256={chk[:16]}...")
+            if not sync_to_device or not app_pkg or not ver:
+                return {"version": ver, "last_modified": last_mod, "checksum": chk}
+            # Check what version is cached inside the Android app sandbox
+            out = self.sh(f"run-as {app_pkg} ls files/hybrid/packages/{feat} files/hybrid/{feat} 2>/dev/null || true").strip()
+            print(f"      [Bundle Android] caché local en {app_pkg}: {out.splitlines() if out else 'vacío'}")
+            return {"version": ver, "last_modified": last_mod, "checksum": chk, "local_cached": out}
+        except Exception as e:
+            print(f"      [Bundle CDN] aviso al consultar {cdn_url}: {e}")
+            return None
