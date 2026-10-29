@@ -211,6 +211,23 @@ DOM_EXTRACT_JS = r"""
     const ariaHidden = el.getAttribute('aria-hidden') || '';
     const ariaLive = el.getAttribute('aria-live') || '';
     const tabindex = el.getAttribute('tabindex') || '';
+    const nestedSpanAria = (!ariaLabel && (tag === 'button' || tag === 'a'))
+      ? (el.querySelector('span[aria-label]:not([role]), div[aria-label]:not([role])')?.getAttribute('aria-label') || '').trim()
+      : '';
+    const hasUiLibAttr = Array.from(el.attributes || []).some(a => /^data-[a-z]{2,6}-id$/i.test(a.name))
+      || !!el.querySelector('[data-pill-content], [data-background-tab]');
+    const hasForLabel = !!(id && document.querySelector('label[for="' + id + '"]')) || !!el.closest('label');
+    const placeholder = (el.getAttribute('placeholder') || '').trim();
+    const inputPlaceholderOnly = (tag === 'input' && (el.type || 'text') !== 'hidden' && (el.type || '') !== 'radio' && (el.type || '') !== 'checkbox' && !ariaLabel && !ariaLabelledby && !hasForLabel && placeholder)
+      ? placeholder
+      : '';
+    const visibleInner = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    const comboboxMissingValue = (role === 'combobox' && visibleInner && ariaLabelledby)
+      ? (() => {
+          const lblByTxt = ariaLabelledby.split(/\s+/).map(rid => document.getElementById(rid)?.textContent?.trim() || '').join(' ').trim();
+          return (lblByTxt && !lblByTxt.toLowerCase().includes(visibleInner.toLowerCase())) ? (lblByTxt + ' (omite valor seleccionado «' + visibleInner + '»)') : '';
+        })()
+      : '';
     let label = ariaLabel;
     if (!label && ariaLabelledby) {
       label = ariaLabelledby.split(/\s+/).map(rid => document.getElementById(rid)?.textContent?.trim() || '').join(' ').trim();
@@ -218,7 +235,7 @@ DOM_EXTRACT_JS = r"""
     if (!label) {
       label = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
     }
-    if (!label && tag !== 'svg' && tag !== 'img' && tag !== 'input' && !ariaLive) continue;
+    if (!label && tag !== 'svg' && tag !== 'img' && tag !== 'input' && !ariaLive && !nestedSpanAria) continue;
     let sel = tag;
     if (id) sel += '#' + id;
     if (testId) sel += `[data-testid="${testId}"]`;
@@ -252,6 +269,8 @@ DOM_EXTRACT_JS = r"""
       poeditorKey: keyMeta ? keyMeta.key : '',
       poeditorOrigin: keyMeta ? keyMeta.origin : (hasUiLibAttr ? 'Origen: Componente de Librería UI (Design System)' : 'Origen: Código Front-End de la Vista'),
       nestedSpanAria,
+      inputPlaceholderOnly,
+      comboboxMissingValue,
       html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 300)
     });
   }

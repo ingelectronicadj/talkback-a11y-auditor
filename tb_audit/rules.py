@@ -87,6 +87,16 @@ def text_a11y_issues(text, expected_locale="es"):
             "Encabezados y etiquetas (WCAG 2.4.6 / 4.1.2): la etiqueta accesible repite al final un importe o unidad ya anunciado («%s»)"
             % text[:85]
         )
+    if re.search(r"^(?:mm/dd/yyyy|dd/mm/yyyy|yyyy-mm-dd)(?:\s+edit)?\b", text.lower()):
+        issues.append(
+            "Instrucciones o etiquetas (WCAG 1.3.1 / 3.3.2): campo de fecha carece de etiqueta accesible y anuncia solo la máscara de formato («%s»)"
+            % text[:60]
+        )
+    if re.search(r"^(?:informative message|error|illustration|icon)\s+(?:graphic|image|imagen)$", text.lower()):
+        issues.append(
+            "Contenido no textual (WCAG 1.1.1): ilustración/icono decorativo de aviso expuesto con alt genérico («%s») en vez de aria-hidden=\"true\""
+            % text[:60]
+        )
     words = text.split()
     if len(words) >= 18:
         issues.append(

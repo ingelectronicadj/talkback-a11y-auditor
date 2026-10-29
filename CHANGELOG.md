@@ -2,6 +2,13 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.5.1] - 2026-10-28
+
+### Añadido
+- **Detección de `<input>` huérfanos que exponen únicamente su `placeholder` (`inputPlaceholderOnly` - WCAG 1.3.1 / 3.3.2)**.
+- **Detección de selectores `role="combobox"` cuyo `aria-labelledby` omite el valor seleccionado (`comboboxMissingValue` - WCAG 4.1.2)**.
+- **Detección de ilustraciones decorativas con `alt` genérico y `aria-hidden="false"` en banners informativos o de error (WCAG 1.1.1)**.
+
 ## [0.5.0] - 2026-10-28
 
 ### Añadido

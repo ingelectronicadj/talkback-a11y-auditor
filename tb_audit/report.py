@@ -449,7 +449,40 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                     % (sutt, m_tk.group(2))
                 )
     if isinstance(dom_snapshot, dict):
+        spa_fi = (dom_snapshot.get("spaFocusIssue") or "").strip()
+        if spa_fi and steps:
+            steps[0].setdefault("seq_issues", [])
+            if spa_fi not in steps[0]["seq_issues"]:
+                steps[0]["seq_issues"].append(spa_fi)
         for el in dom_snapshot.get("elements", []):
+            ipo = (el.get("inputPlaceholderOnly") or "").strip()
+            if ipo and steps:
+                msg_ipo = (
+                    "Instrucciones o etiquetas (WCAG 1.3.1 / 3.3.2): <input> (%s) carece de <label>/aria-label vinculado y expone solo su placeholder=«%s»"
+                    % (el.get("selector") or "input", ipo[:40])
+                )
+                target_st = steps[-1]
+                for st_cand in steps:
+                    if ipo.lower() in (st_cand.get("utterance") or "").lower():
+                        target_st = st_cand
+                        break
+                target_st.setdefault("seq_issues", [])
+                if msg_ipo not in target_st["seq_issues"]:
+                    target_st["seq_issues"].append(msg_ipo)
+            cmv = (el.get("comboboxMissingValue") or "").strip()
+            if cmv and steps:
+                msg_cmv = (
+                    "Nombre, función, valor (WCAG 4.1.2): selector role=\"combobox\" (%s) tiene aria-labelledby=«%s» y no anuncia el valor seleccionado"
+                    % (el.get("selector") or "button[role=combobox]", cmv[:65])
+                )
+                target_st = steps[-1]
+                for st_cand in steps:
+                    if (el.get("label") or "").lower() in (st_cand.get("utterance") or "").lower():
+                        target_st = st_cand
+                        break
+                target_st.setdefault("seq_issues", [])
+                if msg_cmv not in target_st["seq_issues"]:
+                    target_st["seq_issues"].append(msg_cmv)
             nsa = (el.get("nestedSpanAria") or "").strip()
             if nsa and steps:
                 msg = (
