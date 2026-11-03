@@ -2,6 +2,14 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.8.1] - 2026-11-03
+
+### Corregido
+- **`--login` robusto en pantallas de dev-login (`tb_audit/sso.py`)**:
+  - El tap del botón de login ya no depende de `text == "login"` exacto: busca las variantes `login`/`log in`/`iniciar`/`entrar`/`acceder`/`continuar` en text + content-desc + resource-id, con fallback a un `Button` clickeable situado debajo del campo de token.
+  - Reintenta hasta 3 veces cerrando el teclado entre intentos y verificando que la pantalla de login desapareció; si no avanza, avisa que la sesión pudo expirar.
+  - Prefiere el EditText vacío cuando hay varios y añade prints de progreso por paso.
+
 ## [0.8.0] - 2026-11-03
 
 ### Añadido

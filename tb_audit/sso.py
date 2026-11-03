@@ -70,7 +70,10 @@ def login_flow(adb_client, cfg):
     if not edit:
         print("      AVISO: no se encontró el campo de token")
         return
-    b = edit[0]["bounds"]
+    print("      campo de token localizado (%d EditText en pantalla)" % len(edit))
+    empty_edit = [n for n in edit if not n["text"].strip()]
+    target_edit = empty_edit[0] if empty_edit else edit[0]
+    b = target_edit["bounds"]
     adb_client.tap((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
     time.sleep(1)
     for _ in range(2):
@@ -84,16 +87,57 @@ def login_flow(adb_client, cfg):
         time.sleep(0.3)
         adb_client.run(["shell", "input", "keyevent", "67"], check=False)
         time.sleep(0.3)
+    print("      token escrito en pantalla de login")
     adb_client.close_keyboard()
     time.sleep(0.8)
-    nodes = adb_client.dump_nodes()
-    login = [n for n in nodes if n["bounds"] and n["text"].strip().lower() == "login"]
-    if login:
-        b = login[0]["bounds"]
+
+    login_words = ("login", "log in", "iniciar", "entrar", "acceder", "continuar")
+
+    def _login_candidates(nodes, field_bounds):
+        by_label = [
+            n
+            for n in nodes
+            if n["bounds"]
+            and any(
+                w in (n["text"] + " " + n["desc"] + " " + n.get("rid", "")).lower()
+                for w in login_words
+            )
+        ]
+        if by_label:
+            return by_label
+        return [
+            n
+            for n in nodes
+            if n["bounds"]
+            and n["clickable"]
+            and n["bounds"][1] > field_bounds[3]
+            and "button" in n["cls"].lower()
+        ]
+
+    logged_in = False
+    for attempt in range(3):
+        nodes = adb_client.dump_nodes()
+        cands = _login_candidates(nodes, target_edit["bounds"])
+        if not cands:
+            time.sleep(1)
+            continue
+        n = cands[0]
+        label = n["text"].strip() or n["desc"].strip() or n["cls"]
+        b = n["bounds"]
+        print("      tap en botón de login: %s" % label)
         adb_client.tap((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
         time.sleep(4)
-    else:
-        print("      AVISO: botón Login no encontrado")
+        adb_client.close_keyboard()
+        nodes = adb_client.dump_nodes()
+        if not any(x["cls"].endswith("EditText") for x in nodes):
+            logged_in = True
+            break
+        print("      reintento %d/3: pantalla de login sigue visible" % (attempt + 1))
+    if not logged_in:
+        print(
+            "      AVISO: la pantalla de login no avanzó tras el tap "
+            "(la sesión SSO puede haber expirado)"
+        )
     cur = adb_client.run(["shell", "dumpsys", "activity", "activities"], check=False)
     m = re.search(r"topResumedActivity=.*?([\w.]+Activity)", cur)
     print("      tras login -> %s" % (m.group(1) if m else "?"))
