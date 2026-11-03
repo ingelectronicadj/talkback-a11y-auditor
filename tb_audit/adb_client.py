@@ -4,9 +4,46 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from .config import TALKBACK_SVC, TB_PREFS_ACTIVITY
+
+
+def find_sdk_root():
+    """Resuelve la raíz del Android SDK multiplataforma:
+    ANDROID_HOME > ANDROID_SDK_ROOT > ~/Library/Android/sdk (macOS) >
+    %LOCALAPPDATA%\\Android\\Sdk (Windows) > ~/Android/Sdk (Linux)."""
+    for env in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        root = os.environ.get(env)
+        if root and os.path.isdir(root):
+            return root
+    if sys.platform == "win32":
+        cand = os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local")),
+            "Android",
+            "Sdk",
+        )
+        if os.path.isdir(cand):
+            return cand
+    for cand in (
+        os.path.expanduser("~/Library/Android/sdk"),
+        os.path.expanduser("~/Android/Sdk"),
+        os.path.expanduser("~/AppData/Local/Android/Sdk"),
+    ):
+        if os.path.isdir(cand):
+            return cand
+    return os.environ.get("ANDROID_HOME", os.path.expanduser("~/Library/Android/sdk"))
+
+
+def sdk_bin(sdk_root, *parts):
+    """Une `parts` bajo `sdk_root` añadiendo '.exe' en Windows y cayendo al PATH
+    si el binario no existe en el SDK."""
+    name = parts[-1] + (".exe" if sys.platform == "win32" else "")
+    path = os.path.join(sdk_root, *parts[:-1], name)
+    if os.path.exists(path):
+        return path
+    return parts[-1]
 
 
 class AdbClient:
@@ -15,9 +52,9 @@ class AdbClient:
     def __init__(self, device="emulator-5554", timeout=25):
         self.device = device
         self.timeout = timeout
-        sdk_root = os.environ.get("ANDROID_HOME", os.path.expanduser("~/Library/Android/sdk"))
-        self.adb_bin = os.path.join(sdk_root, "platform-tools", "adb")
-        self.emulator_bin = os.path.join(sdk_root, "emulator", "emulator")
+        sdk_root = find_sdk_root()
+        self.adb_bin = sdk_bin(sdk_root, "platform-tools", "adb")
+        self.emulator_bin = sdk_bin(sdk_root, "emulator", "emulator")
 
     def ensure_emulator_running(self, avd_name=None, boot_timeout=120):
         """Si no hay emulador activo en `adb devices`, arranca el AVD automáticamente
@@ -390,8 +427,10 @@ class AdbClient:
         """Intenta extraer el packageName de un archivo .apk usando aapt2/aapt del Android SDK."""
         import glob
 
-        sdk_root = os.environ.get("ANDROID_HOME") or os.path.expanduser("~/Library/Android/sdk")
+        sdk_root = find_sdk_root()
         for tool in ("aapt2", "aapt"):
+            if sys.platform == "win32":
+                tool = tool + ".exe"
             matches = sorted(glob.glob(os.path.join(sdk_root, "build-tools", "*", tool)), reverse=True)
             if matches:
                 try:

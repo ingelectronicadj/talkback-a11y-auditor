@@ -62,3 +62,21 @@ Esta guía reúne las soluciones a los problemas más frecuentes al auditar acce
 | `--mode alt` | Navegación rápida por teclado de accesibilidad (`Alt + Flecha Derecha`) | Usa el atajo de teclado por defecto de TalkBack. Útil en vistas sin `<input>` activos que intercepten eventos de teclado. |
 | `--mode tab` | Prueba de teclado externo Bluetooth (`Tab` / `Shift+Tab`) | Recorre únicamente controles interactivos enfocables (`button`, `a`, `input`, o nodos con `tabindex="0"`), saltándose encabezados y textos estáticos. |
 | `--manual` | Flujos multi-pantalla con interacción del evaluador | El evaluador navega libremente en el emulador (o escribe `n`, `p`, `t`, `T`, `e`, `q` en la terminal) y el script graba cada cambio de foco y transición de pantalla. |
+
+---
+
+## 6. Ejecución en Windows 10/11 como SO anfitrión
+
+El auditor es multiplataforma desde la v0.7.0. En Windows todo funciona igual que en macOS con estas particularidades:
+
+- **OCR de la barra de TalkBack**: se usa `tb_ocr.ps1` (Windows.Media.Ocr de WinRT) en lugar del binario Swift de macOS. Requiere **PowerShell 5.1+** (incluido de serie en Windows 10/11) y que el sistema tenga un *language pack* OCR instalado (español o inglés; el script prueba `es-ES`, `es-MX`, `es-419`, `es-AR`, `en-US` y el idioma del perfil de usuario).
+  - Si el OCR no puede inicializarse, el reporte cae al modo degradado (texto del árbol `uiautomator`).
+  - Si la política de ejecución bloquea el `.ps1`, el propio lanzador usa `-ExecutionPolicy Bypass` por proceso; no hace falta cambiar la política global.
+- **Android SDK**: se detecta en este orden: `ANDROID_HOME` -> `ANDROID_SDK_ROOT` -> `%LOCALAPPDATA%\Android\Sdk`. Si `adb.exe` no está en esa ruta se cae al `PATH`.
+- **Entrada interactiva**: en `--manual` y en `crypto_sso_helper.py` los comandos se escriben igual (tecla + `Enter`), pero internamente se leen con `msvcrt` en vez de `select`, porque `select` no funciona sobre stdin en Windows.
+- **Rutas y ejecutables**: el script resuelve automáticamente `adb.exe`, `emulator.exe` y `aapt.exe` con sufijo `.exe`.
+- **Python**: usar `py -3` o `python` en lugar de `python3` según la instalación:
+  ```powershell
+  py -3 talkback_audit.py --profile crypto_arg --login --view landing
+  ```
+- **Consola QEMU**: los gestos (`swipe`, `Tab`, `double-tap`) se inyectan por socket a `127.0.0.1:<puerto-emulador>` igual que en macOS; no requiere configuración extra.

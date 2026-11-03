@@ -35,14 +35,20 @@ En lugar de `adb shell input swipe`, `AdbClient` se conecta por TCP al socket de
   - La **franja oscura de subtítulos de TalkBack** (`find_caption_bar`: banda horizontal inferior con luminancia uniforme oscura).
   - La **firma visual de pantalla** (`screen_sig` 8×12) para detectar transiciones de pantalla o apertura de modales.
 
-### C. Extracción OCR con filtro de color en `Vision.framework` (`tb_ocr.swift`)
+### C. Extracción OCR con filtro de color (`tb_ocr.swift` en macOS / `tb_ocr.ps1` en Windows)
 
 La opción oficial de desarrollador de TalkBack **"Display speech output"** (*Mostrar salida de voz*) dibuja en la parte inferior de la pantalla una ventana semitransparente con el texto exacto enviado al motor TTS.
 
-Para evitar que el OCR lea texto oscuro de la aplicación que se transparenta detrás del banner de TalkBack:
+`ensure_ocr_binary()` (`tb_audit/vision.py`) elige el motor según el SO anfitrión:
 
-1. `tb_ocr.swift` (compilado a código nativo con `swiftc -O`) inspecciona la región inferior (`y >= 0.82` en coordenadas de pantalla).
-2. Todo píxel que no sea texto blanco brillante (`R < 170 || G < 170 || B < 170`) se aplana a gris oscuro uniforme (`RGB = 45, 45, 45`) antes de invocar `VNRecognizeTextRequest` (`level = .accurate`, `languages = ["es-ES", "es-MX", "en-US"]`).
+- **macOS**: `tb_ocr.swift` compilado a código nativo con `swiftc -O` (`Vision.framework`, `VNRecognizeTextRequest`, `level = .accurate`).
+- **Windows**: `tb_ocr.ps1` ejecutado con `powershell -NoProfile -ExecutionPolicy Bypass -File` (`Windows.Media.Ocr` de WinRT, sin dependencias externas). El aplanado de la banda se hace con C# inline (`Add-Type`) sobre `System.Drawing`.
+
+Para evitar que el OCR lea texto oscuro de la aplicación que se transparenta detrás del banner de TalkBack, ambos motores aplican el mismo preproceso y formato de salida:
+
+1. Inspeccionan la región inferior de la barra de caption (`y: 0.845 .. 0.936`, `x: 0.03 .. 0.97`).
+2. Todo píxel que no sea texto blanco brillante (`R < 170 || G < 170 || B < 170`) se aplana a gris oscuro uniforme (`RGB = 58, 58, 58`) antes del reconocimiento.
+3. Emiten una línea por bloque de texto con formato `x,y,w,h<TAB>texto` y coordenadas normalizadas (0..1, origen top-left), consumida indistintamente por `ocr_step_info()`.
 3. `tb_audit/vision.py` (`ocr_step_info`) filtra además por alineación izquierda (`x <= 0.75`) debajo de la cabecera `"TalkBack"`, eliminando botones o importes de fondo y detectando simultáneamente si el cuerpo central de la vista está en estado **Skeleton** (`is_skeleton`).
 
 ### D. Inspección DOM / ARIA e `IndexedDB` vía Chrome DevTools Protocol (`tb_audit/cdp.py`)

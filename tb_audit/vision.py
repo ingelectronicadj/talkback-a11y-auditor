@@ -1,8 +1,9 @@
-"""Procesamiento visual del framebuffer (recuadro verde, barra de caption, firma) y OCR Vision."""
+"""Procesamiento visual del framebuffer (recuadro verde, barra de caption, firma) y OCR."""
 
 import os
 import re
 import subprocess
+import sys
 from .config import SCRIPT_DIR
 from .rules import norm_utt
 
@@ -147,10 +148,41 @@ def sig_diff(a, b):
 
 
 def ensure_ocr_binary():
+    """Devuelve el comando OCR disponible como lista de argumentos:
+      - macOS: [tb_ocr] (Vision, compilado desde tb_ocr.swift con swiftc)
+      - Windows: [powershell, -NoProfile, -ExecutionPolicy, Bypass, -File, tb_ocr.ps1]
+        (Windows.Media.Ocr WinRT; el .ps1 aplica el mismo aplanado de la barra de caption)
+    Devuelve None si no hay OCR usable; el reporte cae al texto del nodo."""
+    if sys.platform == "win32":
+        ps1 = os.path.join(SCRIPT_DIR, "tb_ocr.ps1")
+        if os.path.exists(ps1):
+            for shell in ("powershell.exe", "pwsh.exe", "powershell", "pwsh"):
+                try:
+                    subprocess.run(
+                        [shell, "-NoProfile", "-Command", "$PSVersionTable.PSVersion"],
+                        check=True,
+                        capture_output=True,
+                        timeout=15,
+                    )
+                    return [
+                        shell,
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        ps1,
+                    ]
+                except Exception:
+                    continue
+        print(
+            "OCR no disponible en Windows (se requiere PowerShell 5.1+ con Windows.Media.Ocr); "
+            "el reporte usará solo el texto del nodo."
+        )
+        return None
     src = os.path.join(SCRIPT_DIR, "tb_ocr.swift")
     binpath = os.path.join(SCRIPT_DIR, "tb_ocr")
     if os.path.exists(binpath):
-        return binpath
+        return [binpath]
     try:
         subprocess.run(
             ["swiftc", "-O", src, "-o", binpath],
@@ -158,13 +190,13 @@ def ensure_ocr_binary():
             capture_output=True,
             timeout=120,
         )
-        return binpath
+        return [binpath]
     except Exception as e:
         print("OCR no disponible (%s); el reporte usará solo el texto del nodo." % e)
         return None
 
 
-def ocr_step_info(ocr_bin, png_path, bar_y=None):
+def ocr_step_info(ocr_cmd, png_path, bar_y=None):
     """Analiza por OCR la captura completa del paso y devuelve:
       - utterance: texto limpio anunciado en la barra de TalkBack
       - raw_caption: texto crudo de la barra (incluyendo 'TalkBack menu. Button')
@@ -172,11 +204,16 @@ def ocr_step_info(ocr_bin, png_path, bar_y=None):
       - is_skeleton: True si hay título de vista/drawer pero el cuerpo central
         (0.185 < cy < bar_y) carece por completo de texto (skeletons grises).
     """
-    if not ocr_bin:
+    if not ocr_cmd:
         return {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
     try:
         out = subprocess.run(
-            [ocr_bin, png_path], capture_output=True, text=True, timeout=60
+            list(ocr_cmd) + [png_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
         ).stdout
     except Exception:
         return {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}

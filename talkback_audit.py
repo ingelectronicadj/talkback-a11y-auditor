@@ -92,12 +92,43 @@ def run_manual(adb_client, ocr_bin, out_dir, args):
     last_nodes = adb_client.dump_nodes()
     steps, last_sig, quiet, i, visited = [], None, 0, 0, set()
     prev_screen = None
+    win_buf = []
+
+    def _read_keys_win32():
+        """Recolecta teclas sueltas con msvcrt y devuelve la línea al pulsar Enter."""
+        import msvcrt
+
+        while msvcrt.kbhit():
+            ch = msvcrt.getwch()
+            if ch in ("\r", "\n"):
+                line = "".join(win_buf)
+                win_buf.clear()
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                return line
+            if ch == "\x08":
+                if win_buf:
+                    win_buf.pop()
+                    sys.stdout.write("\b \b")
+            elif ch >= " ":
+                win_buf.append(ch)
+                sys.stdout.write(ch)
+            sys.stdout.flush()
+        return None
+
     try:
         while True:
             if sys.platform != "win32":
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.0)
                 if rlist:
                     line = sys.stdin.readline()
+                    if _handle_terminal_key(adb_client, line):
+                        print("      finalizado por comando 'q'")
+                        break
+                    time.sleep(0.6)
+            else:
+                line = _read_keys_win32()
+                if line is not None:
                     if _handle_terminal_key(adb_client, line):
                         print("      finalizado por comando 'q'")
                         break

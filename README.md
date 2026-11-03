@@ -12,8 +12,8 @@ Automatiza o asiste el recorrido lineal con TalkBack, captura la imagen y el anu
 - **Navegación lineal 100% automática (`--mode swipe`) o manual asistida (`--manual`)**:
   - Inyecta gestos táctiles reales de TalkBack a través del socket de consola QEMU del emulador (`event mouse`), evitando la limitación de Android donde `adb shell input swipe` es ignorado por el servicio de accesibilidad.
   - Detecta el final de la pantalla (`No hay más elemento enfocable` / `No next focusable item`), cierra automáticamente teclados virtuales (`Gboard`) cuando un `<input>` atrapa el foco, avanza carruseles y salta series largas de puntos en gráficas tras registrar el hallazgo.
-- **Captura fiel de la voz de TalkBack (macOS `Vision.framework`)**:
-  - Compila automáticamente `tb_ocr.swift` y filtra a nivel de píxel la barra inferior de subtítulos de TalkBack para extraer exactamente lo que el lector verbaliza.
+- **Captura fiel de la voz de TalkBack (OCR multiplataforma)**:
+  - En **macOS** compila automáticamente `tb_ocr.swift` (`Vision.framework`) y en **Windows** ejecuta `tb_ocr.ps1` (`Windows.Media.Ocr`, WinRT nativo). En ambos casos filtra a nivel de píxel la barra inferior de subtítulos de TalkBack para extraer exactamente lo que el lector verbaliza.
 - **Inspector técnico de WebView por Chrome DevTools Protocol (`tb_audit/cdp.py`)**:
   - Si la pantalla contiene un WebView debuggable (`webview_devtools_remote_<pid>`), extrae automáticamente los selectores HTML, atributos ARIA (`role`, `aria-label`, `aria-labelledby`, `aria-hidden`, `tabindex`), el snippet HTML limpio con resaltado de sintaxis y el diccionario de internacionalización (`IndexedDB`) para distinguir si un defecto proviene del diccionario de traducciones o del componente UI.
 - **Catálogo taxonómico completo WCAG 2.2 (`tb_audit/wcag_catalog.py`)**:
@@ -23,9 +23,12 @@ Automatiza o asiste el recorrido lineal con TalkBack, captura la imagen y el anu
 
 ## Requisitos
 
-- **macOS** (con Command Line Tools de Xcode para `swiftc` y `Vision.framework`; si no está disponible, funciona en modo degradado usando las etiquetas del árbol de `uiautomator`).
+- **Sistema operativo anfitrión**:
+  - **macOS** (con Command Line Tools de Xcode para `swiftc` y `Vision.framework`), o
+  - **Windows 10/11** (con PowerShell 5.1+ para `tb_ocr.ps1` y `Windows.Media.Ocr`; no requiere instalar nada adicional).
+  - En ambos casos, si el OCR no está disponible, funciona en modo degradado usando las etiquetas del árbol de `uiautomator`.
 - **Python 3.9+** (usa únicamente la biblioteca estándar de Python; cero dependencias `pip` externas).
-- **Android SDK Platform-Tools (`adb`)** y **Android Emulator** con Google TalkBack instalado (Android Automotive / Google Play / System Image con Android Accessibility Suite).
+- **Android SDK Platform-Tools (`adb`)** y **Android Emulator** con Google TalkBack instalado (Android Automotive / Google Play / System Image con Android Accessibility Suite). El SDK se detecta automáticamente via `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk` (macOS) o `%LOCALAPPDATA%\Android\Sdk` (Windows).
 
 ---
 
@@ -113,13 +116,14 @@ python3 talkback_audit.py --stop-talkback --setup-only
 ```text
 .
 ├── talkback_audit.py          # Entrypoint CLI, orquestador de barrido y modo --self-test
-├── tb_ocr.swift               # OCR nativo sobre Vision.framework con filtro de píxeles para subtítulos
+├── tb_ocr.swift               # OCR nativo sobre Vision.framework con filtro de píxeles (macOS)
+├── tb_ocr.ps1                 # OCR nativo sobre Windows.Media.Ocr con el mismo filtro (Windows)
 ├── config.example.json        # Plantilla de configuración (copiar a profiles/<app>.local.json)
 ├── profiles/                  # Perfiles locales por app/entorno (*.local.json ignorados en git)
 ├── reportes/                  # Salidas organizadas por aplicación/proyecto (ignoradas en git)
 ├── CHANGELOG.md               # Historial de cambios por versión
 ├── tb_audit/
-│   ├── __init__.py            # Versión del paquete (VERSION = "0.6.0")
+│   ├── __init__.py            # Versión del paquete (VERSION = "0.7.0")
 │   ├── config.py              # Carga de configuración jerárquica (defaults -> profiles/*.local.json -> CLI)
 │   ├── adb_client.py          # Cliente ADB, arranque de AVD, locale, preflight y gestos QEMU (emu_swipe)
 │   ├── vision.py              # Detección de foco verde, barra de subtítulos, skeletons y OCR
