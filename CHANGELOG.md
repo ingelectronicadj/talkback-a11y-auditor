@@ -2,6 +2,13 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.9.0] - 2026-11-03
+
+### Añadido
+- **`entry_text` en navegación de vistas (`talkback_audit.py`, `docs/configuration-and-profiles.md`, `config.example.json`)**:
+  - Cada vista puede declarar `entry_text` para localizar el elemento de entrada por texto/content-desc en el árbol de uiautomator y tapear su centro, independiente de la resolución del emulador (prefiere nodos clickeables; reintenta ~6s).
+  - `entry_tap` queda como fallback por coordenadas absolutas; el refresh de sesión SSO se ejecuta antes de la entrada con cualquiera de los dos métodos.
+
 ## [0.8.3] - 2026-11-03
 
 ### Corregido

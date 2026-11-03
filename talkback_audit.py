@@ -466,7 +466,10 @@ def navigate_to_view(adb_client, cfg, view_spec):
     pkg = cfg.get("app_pkg") or ""
     act = view_spec.get("start_activity") or ""
     tap_xy = view_spec.get("entry_tap")
-    needs_native_entry = bool((pkg and act) or (tap_xy and len(tap_xy) == 2))
+    entry_text = (view_spec.get("entry_text") or "").strip()
+    needs_native_entry = bool(
+        (pkg and act) or (tap_xy and len(tap_xy) == 2) or entry_text
+    )
     if needs_native_entry:
         adb_client.talkback_off()
         time.sleep(0.8)
@@ -474,13 +477,44 @@ def navigate_to_view(adb_client, cfg, view_spec):
         comp = ("%s/%s" % (pkg, act)) if "/" not in act else act
         adb_client.run(["shell", "am", "start", "-n", comp], check=False)
         time.sleep(2.0)
-    if tap_xy and len(tap_xy) == 2:
-        if cfg.get("sso_url") and cfg.get("login_url"):
-            try:
-                _refresh_session(cfg, quiet=True)
-            except Exception:
-                pass
+    if (entry_text or (tap_xy and len(tap_xy) == 2)) and cfg.get("sso_url") and cfg.get(
+        "login_url"
+    ):
+        try:
+            _refresh_session(cfg, quiet=True)
+        except Exception:
+            pass
+    tapped = False
+    if entry_text:
+        needle = entry_text.lower()
+        for _ in range(6):
+            nodes = adb_client.dump_nodes()
+            matches = [
+                n
+                for n in nodes
+                if n["bounds"] and needle in (n["text"] + " " + n["desc"]).lower()
+            ]
+            clickable = [n for n in matches if n.get("clickable")]
+            pick = (clickable or matches)
+            if pick:
+                b = pick[0]["bounds"]
+                print(
+                    "      [view] tap en '%s' (entry_text, nodo %s)"
+                    % (entry_text, (pick[0]["text"] or pick[0]["desc"])[:60])
+                )
+                adb_client.tap((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+                tapped = True
+                break
+            time.sleep(1)
+        if not tapped:
+            print(
+                "      [view] aviso: no apareció ningún nodo con '%s' tras 6s; usando entry_tap"
+                % entry_text
+            )
+    if not tapped and tap_xy and len(tap_xy) == 2:
         adb_client.tap(int(tap_xy[0]), int(tap_xy[1]))
+        tapped = True
+    if tapped:
         time.sleep(float(view_spec.get("entry_wait_sec", 10.0)))
     if view_spec.get("cdp_steps"):
         run_cdp_steps(adb_client, view_spec["cdp_steps"])

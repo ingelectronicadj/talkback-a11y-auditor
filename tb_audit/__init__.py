@@ -1,3 +1,3 @@
 """tb_audit - Paquete modular para auditoría lineal de accesibilidad con TalkBack."""
 
-VERSION = "0.8.3"
+VERSION = "0.9.0"

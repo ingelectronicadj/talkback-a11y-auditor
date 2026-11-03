@@ -17,6 +17,25 @@
       "short_title": "Home",
       "steps": 50,
       "out": "reportes/home"
+    },
+    "detalle": {
+      "title": "Detalle de producto",
+      "start_activity": "com.miempresa.app/.MenuActivity",
+      "entry_text": "Mi producto",
+      "entry_tap": [
+        260,
+        430
+      ],
+      "entry_wait_sec": 10,
+      "steps": 60,
+      "cdp_steps": [
+        {
+          "click_text": "Ver más",
+          "tag": "button",
+          "wait_sec": 2
+        }
+      ],
+      "out": "reportes/detalle"
     }
   }
 }

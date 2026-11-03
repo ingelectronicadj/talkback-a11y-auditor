@@ -87,3 +87,31 @@ Con `config.local.json` presente:
 - `--login` ejecuta automáticamente el flujo de autenticación y carga el token en la pantalla de login de desarrollo.
 - `--refresh` y `--keep-alive` renuevan la sesión en segundo plano para evitar que caduque el token durante pruebas largas.
 - El reporte HTML incluye automáticamente la sección **"Estado de Regresión - Bugs Jira configurados"** y muestra las insignias de cada ticket en las tarjetas del resumen ejecutivo WCAG.
+
+### Escenario D: Navegación declarativa a vistas (`views`)
+
+Cada entrada de `config['views']` puede declarar cómo llegar a la vista antes de auditarla:
+
+```json
+{
+  "views": {
+    "detalle": {
+      "title": "Detalle de producto",
+      "start_activity": "com.miempresa.app/.MenuActivity",
+      "entry_text": "Mi producto",
+      "entry_tap": [260, 430],
+      "entry_wait_sec": 10,
+      "steps": 60,
+      "cdp_steps": [
+        {"click_text": "Ver más", "tag": "button", "wait_sec": 2}
+      ]
+    }
+  }
+}
+```
+
+- `start_activity` abre una actividad concreta (`am start -n pkg/activity`) antes de la entrada.
+- `entry_text` busca en el árbol de accesibilidad (uiautomator) un nodo cuyo texto o content-desc contenga ese valor y tapea su centro. **Preferido frente a `entry_tap`: es independiente de la resolución del emulador.** Reintenta durante ~6s por si el menú tarda en pintarse.
+- `entry_tap` es el fallback por coordenadas absolutas `[x, y]`: funciona pero queda calibrado a una resolución concreta.
+- `entry_wait_sec` es la espera tras el tap de entrada (default 10s).
+- `cdp_steps` ejecuta acciones dentro del WebView vía CDP una vez en la vista (`click` por selector, `click_text`, `hash`, `eval`, con `wait_sec` por paso).
