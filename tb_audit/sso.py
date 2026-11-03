@@ -99,17 +99,25 @@ def login_flow(adb_client, cfg):
     login_words = ("login", "log in", "iniciar", "entrar", "acceder", "continuar")
 
     def _login_candidates(nodes, field_bounds):
-        by_label = [
+        exact = [
+            n
+            for n in nodes
+            if n["bounds"] and n["text"].strip().lower() in login_words
+        ]
+        if exact:
+            return exact
+        clickable_label = [
             n
             for n in nodes
             if n["bounds"]
+            and n["clickable"]
             and any(
                 w in (n["text"] + " " + n["desc"] + " " + n.get("rid", "")).lower()
                 for w in login_words
             )
         ]
-        if by_label:
-            return by_label
+        if clickable_label:
+            return clickable_label
         return [
             n
             for n in nodes

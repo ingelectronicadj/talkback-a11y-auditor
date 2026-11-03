@@ -2,6 +2,11 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.8.3] - 2026-11-03
+
+### Corregido
+- **Prioridad de candidatos en `--login` (`tb_audit/sso.py`)**: en v0.8.1 el matcher por "contiene" podia tapar el titulo de la pantalla (p. ej. "Dev Login") en vez del boton. Ahora el orden es: texto exacto (login/log in/iniciar/entrar/acceder/continuar) -> nodo clickeable que contenga la palabra -> Button clickeable debajo del campo.
+
 ## [0.8.2] - 2026-11-03
 
 ### Corregido
