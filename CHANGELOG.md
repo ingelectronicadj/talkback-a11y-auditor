@@ -2,6 +2,11 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.8.2] - 2026-11-03
+
+### Corregido
+- **Reintentos con backoff en los POSTs de SSO (`tb_audit/sso.py`)**: `refresh_session` reintenta cada POST hasta 2 veces con esperas de 3s/6s antes de fallar, absorbiendo cortes intermitentes de VPN/red sin abandonar la corrida.
+
 ## [0.8.1] - 2026-11-03
 
 ### Corregido

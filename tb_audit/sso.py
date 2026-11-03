@@ -9,16 +9,21 @@ import urllib.request
 from .doctor import friendly_net_error
 
 
-def _post(url, body, headers=None):
+def _post(url, body, headers=None, retries=2):
     h = {"content-type": "application/json"}
     h.update(headers or {})
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(), headers=h, method="POST"
     )
-    try:
-        return urllib.request.urlopen(req, timeout=20).read()
-    except Exception as e:
-        raise RuntimeError(friendly_net_error(e, url))
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=20).read()
+        except Exception as e:
+            last = e
+            if attempt < retries:
+                time.sleep(3 * (attempt + 1))
+    raise RuntimeError(friendly_net_error(last, url))
 
 
 def refresh_session(cfg, quiet=False):
