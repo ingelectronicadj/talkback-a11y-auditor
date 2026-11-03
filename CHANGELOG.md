@@ -9,8 +9,8 @@ Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibil
   - **`tb_ocr.ps1` (nuevo)**: OCR nativo con `Windows.Media.Ocr` (WinRT) sin dependencias externas. Replica el aplanado de la barra de caption de TalkBack (pixels no blancos -> gris oscuro en la banda y: 0.845-0.936) mediante C# inline + `System.Drawing` y emite el mismo formato `x,y,w,h<TAB>texto` con coordenadas normalizadas top-left que `tb_ocr` (Vision/macOS).
   - **`ensure_ocr_binary()` multiplataforma (`tb_audit/vision.py`)**: ahora devuelve el comando OCR como lista de argumentos - `[tb_ocr]` en macOS o `[powershell, -NoProfile, -ExecutionPolicy, Bypass, -File, tb_ocr.ps1]` en Windows (con detección de `powershell.exe`/`pwsh.exe`).
   - **Resolución de Android SDK multiplataforma (`tb_audit/adb_client.py`)**: nuevo helper `find_sdk_root()` que prueba `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `%LOCALAPPDATA%\Android\Sdk` (Windows), `~/Library/Android/sdk` (macOS) y `~/Android/Sdk` (Linux); `sdk_bin()` añade el sufijo `.exe` en Windows para `adb`/`emulator`/`aapt` con fallback a PATH.
-  - **Entrada interactiva en Windows**: lectura de línea con eco vía `msvcrt` en `crypto_sso_helper.py` (menú SSO keep-alive) y en el modo `--manual` de `talkback_audit.py` (comandos n/p/t/T/d/u/e/q), sustituyendo a `select.select` que no funciona sobre stdin en Windows.
-  - **`crypto_sso_helper.py` `sdk_paths()`**: resolución unificada con `.exe` en Windows y preferencia por `%LOCALAPPDATA%\Android\Sdk`.
+  - **Entrada interactiva en Windows**: lectura de línea con eco vía `msvcrt` en los helpers SSO locales (`*_sso_helper.py`, no versionados) y en el modo `--manual` de `talkback_audit.py` (comandos n/p/t/T/d/u/e/q), sustituyendo a `select.select` que no funciona sobre stdin en Windows.
+  - **`sdk_paths()` en los helpers SSO locales**: resolución unificada con `.exe` en Windows y preferencia por `%LOCALAPPDATA%\Android\Sdk`.
 
 ## [0.6.0] - 2026-10-29
 

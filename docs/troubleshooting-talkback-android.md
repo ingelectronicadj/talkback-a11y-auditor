@@ -73,10 +73,10 @@ El auditor es multiplataforma desde la v0.7.0. En Windows todo funciona igual qu
   - Si el OCR no puede inicializarse, el reporte cae al modo degradado (texto del árbol `uiautomator`).
   - Si la política de ejecución bloquea el `.ps1`, el propio lanzador usa `-ExecutionPolicy Bypass` por proceso; no hace falta cambiar la política global.
 - **Android SDK**: se detecta en este orden: `ANDROID_HOME` -> `ANDROID_SDK_ROOT` -> `%LOCALAPPDATA%\Android\Sdk`. Si `adb.exe` no está en esa ruta se cae al `PATH`.
-- **Entrada interactiva**: en `--manual` y en `crypto_sso_helper.py` los comandos se escriben igual (tecla + `Enter`), pero internamente se leen con `msvcrt` en vez de `select`, porque `select` no funciona sobre stdin en Windows.
+- **Entrada interactiva**: en `--manual` y en los helpers SSO locales (`*_sso_helper.py`) los comandos se escriben igual (tecla + `Enter`), pero internamente se leen con `msvcrt` en vez de `select`, porque `select` no funciona sobre stdin en Windows.
 - **Rutas y ejecutables**: el script resuelve automáticamente `adb.exe`, `emulator.exe` y `aapt.exe` con sufijo `.exe`.
 - **Python**: usar `py -3` o `python` en lugar de `python3` según la instalación:
   ```powershell
-  py -3 talkback_audit.py --profile crypto_arg --login --view landing
+  py -3 talkback_audit.py --profile mi_app --login --view landing
   ```
 - **Consola QEMU**: los gestos (`swipe`, `Tab`, `double-tap`) se inyectan por socket a `127.0.0.1:<puerto-emulador>` igual que en macOS; no requiere configuración extra.
