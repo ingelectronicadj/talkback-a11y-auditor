@@ -2,6 +2,15 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.8.0] - 2026-11-03
+
+### Añadido
+- **`--doctor`: preflight completo del entorno (`tb_audit/doctor.py`, `talkback_audit.py`)**:
+  - Verifica en un solo comando: Python >= 3.9, Android SDK y `adb` ejecutable, dispositivo online en `adb devices`, resolución del emulador vs `entry_tap` del perfil, app objetivo instalada (`pm list packages`), TalkBack presente en `dumpsys accessibility`, motor OCR disponible y reachability TCP de `login_url`/`sso_url`/`hybrid_cdn_url`.
+  - Cada check imprime `[OK]`/`[WARN]`/`[FAIL]` con la acción correctiva (ej. instala Android Accessibility Suite, conecta la VPN, ajusta entry_tap).
+- **Preflight de red automático en `--login`**: antes de arrancar el emulador, sondea los endpoints SSO/CDN del perfil y aborta con la causa probable (VPN desconectada, DNS corporativo, servicio caído) en lugar de arrancar el AVD y colgar 20s en `urlopen`.
+- **Errores de red accionables (`tb_audit/sso.py`, `tb_audit/doctor.py` + helpers `*_sso_helper.py` locales)**: `friendly_net_error()` traduce `URLError`/`socket.gaierror`/`timeout`/`ConnectionRefused`/`HTTPError` a mensajes como `timeout conectando a X -> dominio interno: requiere VPN corporativa activa` en lugar del traceback crudo de urllib.
+
 ## [0.7.0] - 2026-11-03
 
 ### Añadido

@@ -547,6 +547,7 @@ def main():
     ap.add_argument("--config", metavar="FILE", help="archivo JSON de configuración opcional")
     ap.add_argument("--check-bundle", action="store_true", help="consulta versions.json del CDN híbrido configurado en el perfil y muestra versión/fecha")
     ap.add_argument("--self-test", action="store_true", help="ejecuta autovalidación interna sin emulador y sale")
+    ap.add_argument("--doctor", action="store_true", help="preflight del entorno (SDK, emulador, TalkBack, OCR, endpoints SSO/CDN) y sale")
     ap.add_argument("--list-apps", action="store_true", help="lista las apps instaladas en el emulador (marcando la activa en pantalla) y sale")
     ap.add_argument("--apk", metavar="APK_FILE", help="instala un archivo .apk en el emulador, detecta su packageName y lo usa como app objetivo")
     ap.add_argument("--init", action="store_true", help="asistente interactivo para elegir/instalar la app objetivo y guardar config.local.json")
@@ -679,6 +680,23 @@ def main():
         v_info = {"title": args.view_title} if args.view_title else None
         print("Reporte: %s" % rebuild_report(ocr_bin, args.rebuild, view_info=v_info, cfg=cfg))
         return
+
+    if args.doctor:
+        from tb_audit.doctor import run_doctor
+
+        adb_client = AdbClient(device=cfg["device"], timeout=cfg["adb_timeout"])
+        raise SystemExit(0 if run_doctor(cfg, adb_client) == 0 else 1)
+
+    if args.login:
+        from tb_audit.doctor import check_sso_endpoints, net_hint
+
+        unreach = check_sso_endpoints(cfg, timeout=5)
+        if unreach:
+            for k, url, det in unreach:
+                print("ERROR login: %s inalcanzable (%s)" % (k, det))
+                print(" -> %s" % net_hint(url))
+            print("Abortando antes de arrancar el emulador. Revisa la conectividad y reintenta.")
+            raise SystemExit(1)
 
     adb_client = AdbClient(device=cfg["device"], timeout=cfg["adb_timeout"])
     adb_client.ensure_emulator_running(avd_name=args.avd)

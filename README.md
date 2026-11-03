@@ -45,6 +45,9 @@ python3 talkback_audit.py --self-test
 
 # 3. (Opcional) Crear configuración local a partir de la plantilla
 cp config.example.json config.local.json
+
+# 4. Preflight del entorno: SDK, emulador, TalkBack, OCR, app instalada y reachability de los endpoints del perfil (SSO/CDN -> detecta VPN caída antes de auditar)
+python3 talkback_audit.py --doctor
 ```
 
 ### Auditar cualquier aplicación Android
@@ -83,6 +86,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 |---|---|---|
 | `--version` | Muestra la versión instalada y termina | - |
 | `--self-test` | Valida sin emulador los 86 criterios WCAG 2.2, las 16 reglas `TB-*` y el generador HTML | - |
+| `--doctor` | Preflight del entorno: Python, SDK/adb, dispositivo online, resolución vs `entry_tap`, app instalada, TalkBack, OCR y reachability TCP de los endpoints del perfil (SSO/CDN). Sale con código != 0 si hay fallos | - |
 | `--list-apps` | Lista todas las apps de usuario instaladas en el emulador y marca cuál está activa en pantalla | - |
 | `--apk APK_FILE` | Instala un archivo `.apk` en el emulador, extrae su `packageName` y lo abre para auditarlo | - |
 | `--init` | Asistente interactivo para elegir una app instalada o instalar un `.apk` y guardar `config.local.json` | - |
@@ -123,7 +127,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 ├── reportes/                  # Salidas organizadas por aplicación/proyecto (ignoradas en git)
 ├── CHANGELOG.md               # Historial de cambios por versión
 ├── tb_audit/
-│   ├── __init__.py            # Versión del paquete (VERSION = "0.7.0")
+│   ├── __init__.py            # Versión del paquete (VERSION = "0.8.0")
 │   ├── config.py              # Carga de configuración jerárquica (defaults -> profiles/*.local.json -> CLI)
 │   ├── adb_client.py          # Cliente ADB, arranque de AVD, locale, preflight y gestos QEMU (emu_swipe)
 │   ├── vision.py              # Detección de foco verde, barra de subtítulos, skeletons y OCR
@@ -131,6 +135,7 @@ python3 talkback_audit.py --stop-talkback --setup-only
 │   ├── wcag_catalog.py        # Taxonomía oficial WCAG 2.2 (86 criterios) y catálogo de 16 reglas TB-*
 │   ├── rules.py               # Motor de heurísticas por nodo, texto, secuencia, encabezados y omitidos
 │   ├── report.py              # Generador de steps.json, reporte HTML interactivo e índice/ZIP de suite
+│   ├── doctor.py              # Preflight del entorno (--doctor): SDK, emulador, TalkBack, OCR y red SSO/CDN
 │   └── sso.py                 # Hook opcional de autenticación pre-prueba y keep-alive en background
 └── docs/
     ├── architecture.md                # Arquitectura interna, gestos QEMU, OCR y conexión CDP

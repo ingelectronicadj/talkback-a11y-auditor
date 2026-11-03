@@ -6,6 +6,8 @@ import threading
 import time
 import urllib.request
 
+from .doctor import friendly_net_error
+
 
 def _post(url, body, headers=None):
     h = {"content-type": "application/json"}
@@ -13,7 +15,10 @@ def _post(url, body, headers=None):
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(), headers=h, method="POST"
     )
-    return urllib.request.urlopen(req, timeout=20).read()
+    try:
+        return urllib.request.urlopen(req, timeout=20).read()
+    except Exception as e:
+        raise RuntimeError(friendly_net_error(e, url))
 
 
 def refresh_session(cfg, quiet=False):
