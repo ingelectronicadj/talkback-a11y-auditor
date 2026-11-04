@@ -446,16 +446,32 @@ def run_self_test():
     ]
     with tempfile.TemporaryDirectory() as tmpdir:
         os.makedirs(os.path.join(tmpdir, "img"), exist_ok=True)
-        out_html = build_report(sample_steps, [], set(), tmpdir, "self-test")
+        sample_probes = [
+            {
+                "type": "loading_probe", "network": "Slow 3G",
+                "skeleton_detected": True, "loading_announced": False,
+                "screenshots": ["step_001.png"],
+                "announcements": [{"selector": "screen-reader", "text": "\u200b", "codepoints": ["U+200B"]}],
+            },
+            {
+                "type": "probe_control", "control": "Calendar",
+                "screenshots": [], "structure": {"container_role": "grid", "option_count": 7, "options": []},
+                "potential_issue": 'Grid padding cells announce "12x empty day" via aria-label (WCAG 4.1.2)',
+            },
+        ]
+        out_html = build_report(sample_steps, [], set(), tmpdir, "self-test", probes=sample_probes)
         content = open(out_html, encoding="utf-8").read()
         assert "TB-SKEL-001" in content, "Falta detección TB-SKEL-001 en self-test"
         assert "TB-FOCUS-001" in content, "Falta detección TB-FOCUS-001 en self-test"
+        assert "TB-STATUS-001" in content, "Falta detección TB-STATUS-001 desde loading_probe"
+        assert "TB-NAME-001" in content, "Falta detección TB-NAME-001 desde probe_control"
+        assert "sec-probes" in content, "Falta sección sec-probes en report.html"
     print("Self-test OK (v%s): 86 criterios WCAG 2.2, %d reglas TB-* y generador HTML verificados." % (
         VERSION, len(WCAG_CATALOG)
     ))
 
 
-def navigate_to_view(adb_client, cfg, view_spec):
+def navigate_to_view(adb_client, cfg, view_spec, out_dir=None):
     """Navega declarativamente a una vista configurada en `cfg['views'][view_id]`."""
     print("      [view] preparando vista '%s'..." % view_spec.get("title", "?"))
     if cfg.get("sso_url") and cfg.get("login_url"):
@@ -516,9 +532,10 @@ def navigate_to_view(adb_client, cfg, view_spec):
         tapped = True
     if tapped:
         time.sleep(float(view_spec.get("entry_wait_sec", 10.0)))
+    view_probes = []
     if view_spec.get("cdp_steps"):
-        run_cdp_steps(adb_client, view_spec["cdp_steps"])
-    return needs_native_entry
+        view_probes = run_cdp_steps(adb_client, view_spec["cdp_steps"], out_dir=out_dir) or []
+    return needs_native_entry, view_probes
 
 
 def _print_installed_apps(adb_client):
@@ -839,8 +856,9 @@ def main():
         args.steps = int(orig_steps or v_spec.get("steps") or 80)
 
         did_off = False
+        view_probes = []
         if v_spec:
-            did_off = navigate_to_view(adb_client, cfg, v_spec)
+            did_off, view_probes = navigate_to_view(adb_client, cfg, v_spec, out_dir=cur_out)
 
         if args.net_delay and args.net_delay > 0:
             print("      [net-delay] aplicando latencia de red de %d ms en el emulador..." % args.net_delay)
@@ -848,6 +866,8 @@ def main():
 
         print("      capturando árbol accesible inicial...")
         dom_snapshot = capture_webview_dom(adb_client)
+        if isinstance(dom_snapshot, dict) and view_probes:
+            dom_snapshot["probes"] = view_probes
         nodes0 = adb_client.dump_nodes() if (did_off and not dom_snapshot) else []
         last_nodes = nodes0
         if not args.no_setup:
@@ -930,7 +950,8 @@ def main():
         }
         tree = [n for n in (last_nodes or nodes0) if is_a11y_relevant(n)]
         path = build_report(
-            steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg
+            steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg,
+            probes=view_probes,
         )
         completed_dirs.append(cur_out)
         print("Reporte: %s" % path)

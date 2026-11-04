@@ -2,6 +2,15 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.10.0] - 2026-11-04
+
+### Añadido
+- **Paridad de `cdp_steps` y sondas dinámicas `loading_probe` / `probe_control` en WebView (`tb_audit/cdp.py`, `talkback_audit.py`, `tb_audit/report.py`)**:
+  - `run_cdp_steps` ahora soporta `spa_path`, `click_selector`, `type_selector`, `wait_for_text`, `wait_for_selector`, `wait_for_skeleton`, `loading_probe` (latencia de red + sondeo de `[role="status"]`/`[aria-live]` con codepoints + capturas `*_skeleton.png` y `*_announcer.png`) y `probe_control` (expansión + captura + dump ARIA del widget).
+  - `click_text` y `probe_control` acotan primero al `[role="dialog"]` abierto, resuelven `<label>` -> `[role="combobox"]` via `htmlFor`/`aria-labelledby` y emiten `[WARN]` cuando un objetivo no se encuentra.
+  - `tb_audit/report.py` renderiza la sección `sec-probes` en `report.html`, persiste `probes` en `steps.json` (restaurados en `--rebuild`) e inyecta automáticamente hallazgos `TB-STATUS-001` (WCAG 4.1.3) y `TB-NAME-001` (WCAG 4.1.2) cuando una sonda detecta un defecto.
+- **Soporte de `macOS VoiceOver` en `--compare` (`tb_audit/compare.py`)** y copia de todas las imágenes `.png` de `img/` al empaquetar con `--pack` (`tb_audit/report.py`).
+
 ## [0.9.0] - 2026-11-03
 
 ### Añadido

@@ -327,40 +327,98 @@ def _connect_cdp_ws(adb_client, port=9222):
     return "/" + ws_url.split("/", 3)[3]
 
 
-def run_cdp_steps(adb_client, cdp_steps, port=9222):
-    """Ejecuta una lista declarativa de acciones en el WebView vía CDP (`click`, `click_text`, `hash`, `eval`)."""
+def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
+    """Ejecuta una lista declarativa de acciones en el WebView vía CDP (`hash`, `spa_path`, `click`/`click_selector`,
+    `click_text`, `type_selector`, `eval`, `wait_for_*`, `loading_probe`, `probe_control`) y devuelve la lista de probes."""
     import time
 
+    probes = []
     if not cdp_steps:
-        return
+        return probes
     ws_path = _connect_cdp_ws(adb_client, port=port)
     if not ws_path:
-        return
+        return probes
     _ws_eval(
         port,
         ws_path,
         "(() => { try { if (document.activeElement) document.activeElement.blur(); window.scrollTo(0, 0); } catch(e){} return 'ok'; })()",
     )
     for st in cdp_steps:
+        if st.get("wait_for_text") or st.get("wait_for_selector") or "wait_for_skeleton" in st:
+            timeout_s = float(st.get("timeout_sec", 30))
+            t0 = time.time()
+            met = False
+            w_cfg = json.dumps({
+                "txt": st.get("wait_for_text"),
+                "sel": st.get("wait_for_selector"),
+                "skel": st.get("wait_for_skeleton"),
+            })
+            while time.time() - t0 < timeout_s:
+                js_w = (
+                    "(() => { const w = %s; if (w.sel) return !!document.querySelector(w.sel); "
+                    "if (w.txt) return (document.body?.innerText || '').toLowerCase().includes(w.txt.toLowerCase()); "
+                    "const sc = Array.from(document.querySelectorAll('[class*=\"skeleton\" i], [data-testid*=\"skeleton\" i], [aria-busy=\"true\"]')).filter(e => { const r = e.getBoundingClientRect(); return r.height > 2 && r.width > 2; }).length; "
+                    "return w.skel ? sc > 0 : sc === 0; })()" % w_cfg
+                )
+                if _ws_eval(port, ws_path, js_w):
+                    met = True
+                    break
+                time.sleep(0.45)
+            if not met:
+                print("      [WARN] wait_for timeout (%ss): %s" % (int(timeout_s), w_cfg))
+        lp_cfg = st.get("loading_probe") if isinstance(st.get("loading_probe"), dict) else ({} if st.get("loading_probe") else None)
+        if lp_cfg is not None and hasattr(adb_client, "set_network_delay"):
+            try:
+                adb_client.set_network_delay(int(lp_cfg.get("delay_ms", 1200)))
+            except Exception:
+                pass
         if st.get("hash"):
             js = (
                 "(() => { try { if (document.activeElement) document.activeElement.blur(); } catch(e){} location.hash = %s; return 'ok'; })()"
                 % json.dumps(st["hash"])
             )
             _ws_eval(port, ws_path, js)
-        elif st.get("click"):
-            sel = json.dumps(st["click"])
+        elif st.get("spa_path"):
+            p = json.dumps(st["spa_path"])
+            js = (
+                "(async () => { const prev = (document.querySelector('main h1, h1')?.innerText || '').trim(); "
+                "const cb = document.querySelector('[role=\"dialog\"] button[aria-label=\"Close\"], [role=\"dialog\"] button[data-testid=\"close-button\"]'); if (cb) cb.click(); "
+                "window.history.pushState({}, '', %s); window.dispatchEvent(new PopStateEvent('popstate')); "
+                "for (let w = 0; w < 10; w++) { await new Promise(r => setTimeout(r, 700)); const h = (document.querySelector('main h1, h1')?.innerText || '').trim(); if (h && h !== prev) break; } return 'ok'; })()" % p
+            )
+            _ws_eval(port, ws_path, js, await_promise=True)
+        elif st.get("click") or st.get("click_selector"):
+            raw_sel = st.get("click") or st.get("click_selector")
+            sel = json.dumps(raw_sel)
             js = (
                 "(() => { const el = document.querySelector(%s); if (el) { el.click(); return 'clicked'; } return 'not-found'; })()"
                 % sel
             )
-            _ws_eval(port, ws_path, js)
+            if _ws_eval(port, ws_path, js) == "not-found":
+                print('      [WARN] click_selector no encontrado: "%s"' % raw_sel)
         elif st.get("click_text"):
-            txt = json.dumps(st["click_text"])
-            tag = json.dumps(st.get("tag", "button,a"))
+            raw_txt = st["click_text"]
+            txt = json.dumps(raw_txt)
             js = (
-                "(() => { const t = %s.toLowerCase(); const el = Array.from(document.querySelectorAll(%s)).find(e => (e.innerText || e.textContent || e.getAttribute('aria-label') || '').toLowerCase().includes(t)); if (el) { el.click(); return 'clicked'; } return 'not-found'; })()"
-                % (txt, tag)
+                "(() => { const needle = %s.toLowerCase(); "
+                "const openDlg = Array.from(document.querySelectorAll('[role=\"dialog\"]')).find(d => d.getBoundingClientRect().width > 50); "
+                "const root = openDlg || document.querySelector('main') || document.body; "
+                "const cands = Array.from(root.querySelectorAll('a, button, [role=\"tab\"], [role=\"button\"], label, [data-testid=\"selector-row\"], p, span')); "
+                "for (const el of cands) { const t = ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase(); "
+                "if (t === needle || t.includes(needle)) { let target = el.closest('a, button, [role=\"button\"], [role=\"tab\"], [role=\"combobox\"], [data-testid=\"selector-row\"]'); "
+                "if (!target && el.tagName === 'LABEL') target = (el.htmlFor && document.getElementById(el.htmlFor)) || (el.id && root.querySelector('[aria-labelledby~=\"' + el.id + '\"]')); "
+                "(target || el).click(); return 'clicked'; } } return 'not-found'; })()" % txt
+            )
+            if _ws_eval(port, ws_path, js) == "not-found":
+                print('      [WARN] click_text no encontrado: "%s"' % raw_txt)
+        elif st.get("type_selector"):
+            sel = json.dumps(st["type_selector"])
+            val = json.dumps(str(st.get("text") or ""))
+            js = (
+                "(() => { const el = document.querySelector(%s); if (!el) return 'not-found'; el.focus(); "
+                "const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set; "
+                "if (setter) setter.call(el, %s); else el.value = %s; "
+                "el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return 'ok'; })()" % (sel, val, val)
             )
             _ws_eval(port, ws_path, js)
         elif st.get("eval"):
@@ -368,11 +426,109 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222):
         wait_s = float(st.get("wait_sec", 2.0))
         if wait_s > 0:
             time.sleep(wait_s)
+        if lp_cfg is not None:
+            watch_s = float(lp_cfg.get("watch_ms", 25000)) / 1000.0
+            png_name = lp_cfg.get("png_name") or "loading"
+            probe = {
+                "type": "loading_probe",
+                "network": lp_cfg.get("network") or "Slow 3G",
+                "announcements": [],
+                "skeleton_detected": False,
+                "screenshots": [],
+                "loading_announced": False,
+            }
+            seen = set()
+            captured = False
+            ann_png = False
+            t0 = time.time()
+            while time.time() - t0 < watch_s:
+                stt = _ws_eval(
+                    port,
+                    ws_path,
+                    "(() => { const out = { announcers: [], skeletonCount: 0 }; "
+                    "document.querySelectorAll('[role=\"status\"], [aria-live]').forEach(el => { "
+                    "const txt = el.textContent || ''; out.announcers.push({ selector: el.getAttribute('data-testid') || el.getAttribute('role') || el.tagName, text: txt, codepoints: Array.from(txt).map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase()) }); }); "
+                    "out.skeletonCount = Array.from(document.querySelectorAll('[class*=\"skeleton\" i], [data-testid*=\"skeleton\" i], [aria-busy=\"true\"]')).filter(e => { const r = e.getBoundingClientRect(); return r.height > 2 && r.width > 2; }).length; "
+                    "return JSON.stringify(out); })()",
+                )
+                if isinstance(stt, dict):
+                    for a in stt.get("announcers") or []:
+                        k = "%s|%s" % (a.get("selector"), a.get("text"))
+                        if k not in seen:
+                            seen.add(k)
+                            probe["announcements"].append(a)
+                        cl = (a.get("text") or "").replace("\u200b", "").strip()
+                        if len(cl) > 1 and re.search(r"load|carg|esper|wait", cl, re.I):
+                            probe["loading_announced"] = True
+                    if (stt.get("skeletonCount") or 0) > 0:
+                        probe["skeleton_detected"] = True
+                        if not captured and out_dir and hasattr(adb_client, "screencap_png"):
+                            fn = "%s_skeleton.png" % png_name
+                            adb_client.screencap_png(os.path.join(out_dir, "img", fn))
+                            probe["screenshots"].append(fn)
+                            captured = True
+                        if not ann_png and lp_cfg.get("make_announcer_visible") and probe["loading_announced"] and out_dir and hasattr(adb_client, "screencap_png"):
+                            _ws_eval(
+                                port,
+                                ws_path,
+                                "(() => { const el = document.querySelector('span[data-testid=\"screen-reader\"], [role=\"status\"], [aria-live]'); "
+                                "if (el) el.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:999999;background:#111;color:#0f0;font:16px monospace;padding:10px 14px;border:2px solid #0f0;border-radius:6px;clip:auto!important;width:auto!important;height:auto!important;overflow:visible!important;'; return 'ok'; })()",
+                            )
+                            time.sleep(0.4)
+                            fn_a = "%s_announcer.png" % png_name
+                            adb_client.screencap_png(os.path.join(out_dir, "img", fn_a))
+                            probe["screenshots"].append(fn_a)
+                            ann_png = True
+                    if captured and (stt.get("skeletonCount") or 0) == 0:
+                        break
+                time.sleep(0.4)
+            if hasattr(adb_client, "set_network_delay"):
+                try:
+                    adb_client.set_network_delay(0)
+                except Exception:
+                    pass
+            probes.append(probe)
+        if st.get("probe_control"):
+            lbl = st["probe_control"]
+            png_name = st.get("png_name") or "control_probe"
+            _ws_eval(
+                port,
+                ws_path,
+                "(() => { const needle = %s.toLowerCase(); const openDlg = Array.from(document.querySelectorAll('[role=\"dialog\"]')).find(d => d.getBoundingClientRect().width > 50); "
+                "const root = openDlg || document.querySelector('main') || document.body; "
+                "const cands = Array.from(root.querySelectorAll('a, button, [role=\"tab\"], [role=\"button\"], label, [data-testid=\"selector-row\"], p, span')); "
+                "for (const el of cands) { const t = ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase(); "
+                "if (t === needle || t.includes(needle)) { let target = el.closest('a, button, [role=\"button\"], [role=\"tab\"], [role=\"combobox\"], [data-testid=\"selector-row\"]'); "
+                "if (!target && el.tagName === 'LABEL') target = (el.htmlFor && document.getElementById(el.htmlFor)) || (el.id && root.querySelector('[aria-labelledby~=\"' + el.id + '\"]')); "
+                "(target || el).click(); return 'clicked'; } } return 'not-found'; })()" % json.dumps(lbl),
+            )
+            time.sleep(float(st.get("wait_sec", 2.0)))
+            shots = []
+            if out_dir and hasattr(adb_client, "screencap_png"):
+                fn = "%s.png" % png_name
+                adb_client.screencap_png(os.path.join(out_dir, "img", fn))
+                shots.append(fn)
+            dump = _ws_eval(
+                port,
+                ws_path,
+                "(() => { const dlg = document.querySelector('[role=\"dialog\"]'); let root = dlg || document; "
+                "let listbox = root.querySelector('[role=\"listbox\"], [role=\"radiogroup\"], [role=\"menu\"], [role=\"grid\"], [role=\"tree\"]'); "
+                "if (!listbox && dlg) { root = document; listbox = document.querySelector('[role=\"listbox\"], [role=\"radiogroup\"], [role=\"menu\"], [role=\"grid\"], [role=\"tree\"]'); } "
+                "const trig = Array.from(root.querySelectorAll('button, [role=\"button\"], [role=\"combobox\"]')).find(e => e.getAttribute('aria-expanded') === 'true'); "
+                "const opts = Array.from(root.querySelectorAll('[role=\"option\"], [role=\"radio\"], [role=\"menuitemradio\"], [role=\"menuitemcheckbox\"], [role=\"gridcell\"], [role=\"row\"] > *')).slice(0, 60).map(o => ({ role: o.getAttribute('role') || o.tagName.toLowerCase(), text: (o.innerText || '').trim().slice(0, 60), ariaLabel: o.getAttribute('aria-label') || '', selected: o.getAttribute('aria-selected') ?? o.getAttribute('aria-checked'), disabled: o.getAttribute('aria-disabled') })); "
+                "const emptyDayCells = opts.filter(o => /empty day/i.test(o.ariaLabel || '')).length; "
+                "return JSON.stringify({ trigger_expanded: trig ? (trig.getAttribute('aria-label') || (trig.innerText || '').trim().slice(0, 50)) : null, trigger_haspopup: trig ? trig.getAttribute('aria-haspopup') : null, container_role: listbox ? listbox.getAttribute('role') : null, container_label: listbox ? (listbox.getAttribute('aria-label') || listbox.getAttribute('aria-labelledby') || '') : null, option_count: opts.length, options: opts, empty_day_cells: emptyDayCells }); })()",
+            ) or {}
+            pr = {"type": "probe_control", "control": lbl, "screenshots": shots, "structure": dump if isinstance(dump, dict) else {}}
+            if isinstance(dump, dict) and (dump.get("empty_day_cells") or 0) > 0:
+                pr["potential_issue"] = 'Grid padding cells announce "%dx empty day" via aria-label (WCAG 4.1.2: decorative cells should be empty or aria-hidden)' % dump["empty_day_cells"]
+            probes.append(pr)
     _ws_eval(
         port,
         ws_path,
         "(() => { try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch(e){} return 'ok'; })()",
     )
+    return probes
 
 
 def capture_webview_dom(adb_client, port=9222):

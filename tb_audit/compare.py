@@ -50,6 +50,8 @@ tr:last-child td{border-bottom:none}
 
 def _detect_platform(meta_str):
     m = (meta_str or "").lower()
+    if "macos voiceover" in m or "vo_web" in m:
+        return ("voweb", "macOS VoiceOver (Google Chrome Desktop)", "macOS VoiceOver")
     if "nvda" in m or "chrome desktop" in m or "navegador=" in m:
         return ("web", "Web Desktop NVDA (Google Chrome)", "Web NVDA")
     if "iphone" in m or "ios" in m or "axaudit" in m:
