@@ -115,7 +115,7 @@ def run_doctor(cfg, adb_client=None):
 
     ocr_cmd = ensure_ocr_binary()
     if ocr_cmd:
-        engine = "Windows.Media.Ocr (tb_ocr.ps1)" if sys.platform == "win32" else "Vision (tb_ocr)"
+        engine = "Windows.Media.Ocr (tb_ocr.ps1)" if sys.platform == "win32" else "Vision (tb_ocr_vision)"
         ok("OCR: %s" % engine)
     else:
         warn("OCR no disponible -> el reporte caerá a modo degradado (solo árbol uiautomator)")

@@ -149,7 +149,7 @@ def sig_diff(a, b):
 
 def ensure_ocr_binary():
     """Devuelve el comando OCR disponible como lista de argumentos:
-      - macOS: [tb_ocr] (Vision, compilado desde tb_ocr.swift con swiftc)
+      - macOS: [tb_ocr] (Vision, compilado desde tb_ocr_vision.swift con swiftc)
       - Windows: [powershell, -NoProfile, -ExecutionPolicy, Bypass, -File, tb_ocr.ps1]
         (Windows.Media.Ocr WinRT; el .ps1 aplica el mismo aplanado de la barra de caption)
     Devuelve None si no hay OCR usable; el reporte cae al texto del nodo."""
@@ -179,7 +179,7 @@ def ensure_ocr_binary():
             "el reporte usará solo el texto del nodo."
         )
         return None
-    src = os.path.join(SCRIPT_DIR, "tb_ocr.swift")
+    src = os.path.join(SCRIPT_DIR, "tb_ocr_vision.swift")
     binpath = os.path.join(SCRIPT_DIR, "tb_ocr")
     if os.path.exists(binpath):
         return [binpath]
