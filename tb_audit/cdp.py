@@ -11,73 +11,81 @@ from .rules import norm_utt
 
 
 def _ws_eval(port, ws_path, js_expr, await_promise=False):
-    s = socket.create_connection(("127.0.0.1", port), timeout=10)
-    try:
-        key = base64.b64encode(os.urandom(16)).decode()
-        req = (
-            "GET %s HTTP/1.1\r\n"
-            "Host: 127.0.0.1:%d\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Key: %s\r\n"
-            "Sec-WebSocket-Version: 13\r\n\r\n" % (ws_path, port, key)
-        )
-        s.sendall(req.encode())
-        buf = b""
-        while b"\r\n\r\n" not in buf:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            buf += chunk
-        payload = json.dumps({
-            "id": 1,
-            "method": "Runtime.evaluate",
-            "params": {
-                "expression": js_expr,
-                "returnByValue": True,
-                "awaitPromise": bool(await_promise),
-            },
-        }).encode("utf-8")
-        mask = os.urandom(4)
-        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-        n = len(payload)
-        if n < 126:
-            hdr = struct.pack("!BB", 0x81, 0x80 | n)
-        elif n < 65536:
-            hdr = struct.pack("!BBH", 0x81, 0x80 | 126, n)
-        else:
-            hdr = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
-        s.sendall(hdr + mask + masked)
+    import time
 
-        def read_exact(k):
-            b = b""
-            while len(b) < k:
-                c = s.recv(k - len(b))
-                if not c:
-                    raise EOFError()
-                b += c
-            return b
-
-        while True:
-            _, b2 = struct.unpack("!BB", read_exact(2))
-            length = b2 & 0x7F
-            if length == 126:
-                length = struct.unpack("!H", read_exact(2))[0]
-            elif length == 127:
-                length = struct.unpack("!Q", read_exact(8))[0]
-            if b2 & 0x80:
-                rmask = read_exact(4)
-                data = bytes(b ^ rmask[i % 4] for i, b in enumerate(read_exact(length)))
+    for attempt in range(2):
+        s = socket.create_connection(("127.0.0.1", port), timeout=10)
+        try:
+            key = base64.b64encode(os.urandom(16)).decode()
+            req = (
+                "GET %s HTTP/1.1\r\n"
+                "Host: 127.0.0.1:%d\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: %s\r\n"
+                "Sec-WebSocket-Version: 13\r\n\r\n" % (ws_path, port, key)
+            )
+            s.sendall(req.encode())
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            payload = json.dumps({
+                "id": 1,
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": js_expr,
+                    "returnByValue": True,
+                    "awaitPromise": bool(await_promise),
+                },
+            }).encode("utf-8")
+            mask = os.urandom(4)
+            masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+            n = len(payload)
+            if n < 126:
+                hdr = struct.pack("!BB", 0x81, 0x80 | n)
+            elif n < 65536:
+                hdr = struct.pack("!BBH", 0x81, 0x80 | 126, n)
             else:
-                data = read_exact(length)
-            resp = json.loads(data.decode("utf-8", "replace"))
-            if resp.get("id") == 1:
-                val = resp.get("result", {}).get("result", {}).get("value", "")
-                if isinstance(val, str) and val.startswith(("{", "[")):
-                    return json.loads(val)
-                return val
-    finally:
-        s.close()
+                hdr = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
+            s.sendall(hdr + mask + masked)
+
+            def read_exact(k):
+                b = b""
+                while len(b) < k:
+                    c = s.recv(k - len(b))
+                    if not c:
+                        raise EOFError()
+                    b += c
+                return b
+
+            while True:
+                _, b2 = struct.unpack("!BB", read_exact(2))
+                length = b2 & 0x7F
+                if length == 126:
+                    length = struct.unpack("!H", read_exact(2))[0]
+                elif length == 127:
+                    length = struct.unpack("!Q", read_exact(8))[0]
+                if b2 & 0x80:
+                    rmask = read_exact(4)
+                    data = bytes(b ^ rmask[i % 4] for i, b in enumerate(read_exact(length)))
+                else:
+                    data = read_exact(length)
+                resp = json.loads(data.decode("utf-8", "replace"))
+                if resp.get("id") == 1:
+                    val = resp.get("result", {}).get("result", {}).get("value", "")
+                    if isinstance(val, str) and val.startswith(("{", "[")):
+                        return json.loads(val)
+                    return val
+        except (EOFError, OSError):
+            if attempt == 0:
+                time.sleep(0.5)
+                continue
+            return None
+        finally:
+            s.close()
 
 
 DOM_EXTRACT_JS = r"""
@@ -313,14 +321,18 @@ def _connect_cdp_ws(adb_client, port=9222):
     )
     if not pages:
         return None
-    chosen = pages[0]
+    chosen = None
     for p in pages:
         u = (p.get("url") or "").lower()
-        if ("hybrid/" in u or "file://" in u) and not any(t in u for t in ("utag/", "analytics", "about:blank")):
+        if any(t in u for t in ("utag/", "tiqcdn", "analytics", "about:blank")):
+            continue
+        if "hybrid/" in u or "file://" in u:
             chosen = p
             break
-        if u and not any(t in u for t in ("utag/", "analytics", "about:blank")):
+        if u and not chosen:
             chosen = p
+    if not chosen:
+        return None
     ws_url = chosen.get("webSocketDebuggerUrl", "")
     if not ws_url:
         return None
