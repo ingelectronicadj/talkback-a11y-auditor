@@ -339,7 +339,25 @@ def _connect_cdp_ws(adb_client, port=9222):
     return "/" + ws_url.split("/", 3)[3]
 
 
-def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
+def _build_net_overrides_js(network_overrides):
+    if not network_overrides:
+        return ""
+    ov_json = json.dumps(network_overrides)
+    return (
+        "(() => { window.__tbNetOverrides = %s; window.__tbLoadingProbeDelayMs = window.__tbLoadingProbeDelayMs || 0; "
+        "if (window.__tbFetchPatched) return 'already'; window.__tbFetchPatched = true; "
+        "const origFetch = window.fetch ? window.fetch.bind(window) : null; "
+        "if (origFetch) { window.fetch = async function(input, init) { "
+        "const u = typeof input === 'string' ? input : (input && input.url) || ''; "
+        "for (const [pat, body] of Object.entries(window.__tbNetOverrides || {})) { "
+        "if (u.includes(pat)) { const d = window.__tbLoadingProbeDelayMs || 0; if (d > 0) await new Promise(r => setTimeout(r, d)); "
+        "const txt = typeof body === 'string' ? body : JSON.stringify(body); "
+        "return new Response(txt, { status: 200, headers: { 'Content-Type': 'application/json' } }); } } "
+        "return origFetch(input, init); }; } return 'patched'; })()" % ov_json
+    )
+
+
+def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None, network_overrides=None):
     """Ejecuta una lista declarativa de acciones en el WebView vía CDP (`hash`, `spa_path`, `click`/`click_selector`,
     `click_text`, `type_selector`, `eval`, `wait_for_*`, `loading_probe`, `probe_control`) y devuelve la lista de probes."""
     import time
@@ -350,6 +368,8 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
     ws_path = _connect_cdp_ws(adb_client, port=port)
     if not ws_path:
         return probes
+    if network_overrides:
+        _ws_eval(port, ws_path, _build_net_overrides_js(network_overrides))
     _ws_eval(
         port,
         ws_path,
@@ -379,11 +399,14 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
             if not met:
                 print("      [WARN] wait_for timeout (%ss): %s" % (int(timeout_s), w_cfg))
         lp_cfg = st.get("loading_probe") if isinstance(st.get("loading_probe"), dict) else ({} if st.get("loading_probe") else None)
-        if lp_cfg is not None and hasattr(adb_client, "set_network_delay"):
-            try:
-                adb_client.set_network_delay(int(lp_cfg.get("delay_ms", 1200)))
-            except Exception:
-                pass
+        if lp_cfg is not None:
+            mock_delay = int(lp_cfg.get("mock_delay_ms", 3200))
+            _ws_eval(port, ws_path, "(() => { window.__tbLoadingProbeDelayMs = %d; return 'ok'; })()" % mock_delay)
+            if hasattr(adb_client, "set_network_delay"):
+                try:
+                    adb_client.set_network_delay(int(lp_cfg.get("delay_ms", 1200)))
+                except Exception:
+                    pass
         if st.get("hash"):
             js = (
                 "(() => { try { if (document.activeElement) document.activeElement.blur(); } catch(e){} location.hash = %s; return 'ok'; })()"
@@ -392,12 +415,19 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
             _ws_eval(port, ws_path, js)
         elif st.get("spa_path"):
             p = json.dumps(st["spa_path"])
-            js = (
-                "(async () => { const prev = (document.querySelector('main h1, h1')?.innerText || '').trim(); "
-                "const cb = document.querySelector('[role=\"dialog\"] button[aria-label=\"Close\"], [role=\"dialog\"] button[data-testid=\"close-button\"]'); if (cb) cb.click(); "
-                "window.history.pushState({}, '', %s); window.dispatchEvent(new PopStateEvent('popstate')); "
-                "for (let w = 0; w < 10; w++) { await new Promise(r => setTimeout(r, 700)); const h = (document.querySelector('main h1, h1')?.innerText || '').trim(); if (h && h !== prev) break; } return 'ok'; })()" % p
-            )
+            if lp_cfg is not None:
+                js = (
+                    "(async () => { const cb = document.querySelector('[role=\"dialog\"] button[aria-label=\"Close\"], [role=\"dialog\"] button[data-testid=\"close-button\"]'); if (cb) cb.click(); "
+                    "window.history.pushState({}, '', %s); window.dispatchEvent(new PopStateEvent('popstate')); "
+                    "await new Promise(r => setTimeout(r, 150)); return 'ok'; })()" % p
+                )
+            else:
+                js = (
+                    "(async () => { const prev = (document.querySelector('main h1, h1')?.innerText || '').trim(); "
+                    "const cb = document.querySelector('[role=\"dialog\"] button[aria-label=\"Close\"], [role=\"dialog\"] button[data-testid=\"close-button\"]'); if (cb) cb.click(); "
+                    "window.history.pushState({}, '', %s); window.dispatchEvent(new PopStateEvent('popstate')); "
+                    "for (let w = 0; w < 10; w++) { await new Promise(r => setTimeout(r, 700)); const h = (document.querySelector('main h1, h1')?.innerText || '').trim(); if (h && h !== prev) break; } return 'ok'; })()" % p
+                )
             _ws_eval(port, ws_path, js, await_promise=True)
         elif st.get("click") or st.get("click_selector"):
             raw_sel = st.get("click") or st.get("click_selector")
@@ -483,8 +513,10 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
                             _ws_eval(
                                 port,
                                 ws_path,
-                                "(() => { const el = document.querySelector('span[data-testid=\"screen-reader\"], [role=\"status\"], [aria-live]'); "
-                                "if (el) el.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:999999;background:#111;color:#0f0;font:16px monospace;padding:10px 14px;border:2px solid #0f0;border-radius:6px;clip:auto!important;width:auto!important;height:auto!important;overflow:visible!important;'; return 'ok'; })()",
+                                "(() => { const cands = Array.from(document.querySelectorAll('span[data-testid=\"screen-reader\"], [role=\"status\"], [aria-live]')); "
+                                "const el = cands.find(n => (n.textContent || '').replace(/\\u200B/g, '').trim().length > 1) || cands[0]; if (!el) return 'none'; "
+                                "el.setAttribute('data-orig-style', el.getAttribute('style') || ''); "
+                                "el.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:999999;background:#111;color:#0f0;font:16px monospace;padding:10px 14px;border:2px solid #0f0;border-radius:6px;clip:auto!important;clip-path:none!important;width:auto!important;height:auto!important;overflow:visible!important;'; return 'ok'; })()",
                             )
                             time.sleep(0.4)
                             fn_a = "%s_announcer.png" % png_name
@@ -494,6 +526,11 @@ def run_cdp_steps(adb_client, cdp_steps, port=9222, out_dir=None):
                     if captured and (stt.get("skeletonCount") or 0) == 0:
                         break
                 time.sleep(0.4)
+            _ws_eval(
+                port,
+                ws_path,
+                "(() => { window.__tbLoadingProbeDelayMs = 0; document.querySelectorAll('[data-orig-style]').forEach(el => { el.setAttribute('style', el.getAttribute('data-orig-style') || ''); el.removeAttribute('data-orig-style'); }); return 'ok'; })()",
+            )
             if hasattr(adb_client, "set_network_delay"):
                 try:
                     adb_client.set_network_delay(0)

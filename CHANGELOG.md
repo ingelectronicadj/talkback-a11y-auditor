@@ -2,6 +2,15 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.10.1] - 2026-11-06
+
+### Añadido
+- **Interceptor `network_overrides` en WebView con `mock_delay_ms` durante `loading_probe` (`tb_audit/cdp.py`, `talkback_audit.py`)**: inyecta mocks HTTP declarativos en `window.fetch` y aplica `mock_delay_ms` (`3200 ms` por defecto) mientras `loading_probe` está activo para retener y capturar skeletons de pasos intermedios (Step 2 / Step 3).
+
+### Corregido
+- **Selección del nodo `[aria-live]` activo, `clip-path: none !important` y restauración de `data-orig-style` al finalizar `loading_probe` (`tb_audit/cdp.py`)**: evita dejar el overlay verde del anunciador visible durante el barrido posterior de TalkBack y soporta múltiples regiones `aria-live` alternadas.
+- **`spa_path` cede el control a los `150 ms` cuando el mismo paso incluye `loading_probe`** para capturar el skeleton desde el inicio, y `_connect_cdp_ws` descarta páginas `tiqcdn`/`utag` reintentando ante `EOFError` transitorio.
+
 ## [0.10.0] - 2026-11-04
 
 ### Añadido

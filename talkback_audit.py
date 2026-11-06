@@ -534,7 +534,12 @@ def navigate_to_view(adb_client, cfg, view_spec, out_dir=None):
         time.sleep(float(view_spec.get("entry_wait_sec", 10.0)))
     view_probes = []
     if view_spec.get("cdp_steps"):
-        view_probes = run_cdp_steps(adb_client, view_spec["cdp_steps"], out_dir=out_dir) or []
+        view_probes = run_cdp_steps(
+            adb_client,
+            view_spec["cdp_steps"],
+            out_dir=out_dir,
+            network_overrides=cfg.get("network_overrides"),
+        ) or []
     return needs_native_entry, view_probes
 
 
