@@ -328,10 +328,18 @@ def analyze_sequence_issues(steps):
         if b1 and b2 and len(b1) == 4 and len(b2) == 4:
             cy1 = (b1[1] + b1[3]) / 2.0
             cy2 = (b2[1] + b2[3]) / 2.0
-            if abs(cy1 - cy2) <= 55 and cy1 > 2000 and (b2[2] < b1[0] - 40):
+            prev_lbl = (prev_s.get("label") or prev_s.get("utterance") or "").strip()
+            cur_lbl = (cur_s.get("label") or cur_s.get("utterance") or "").strip()
+            is_primary_first_pattern = bool(
+                re.search(
+                    r"\b(next|siguiente|continue|continuar|confirm|confirmar|review order|revisar orden|save|guardar)\b",
+                    prev_lbl.lower(),
+                )
+            )
+            if abs(cy1 - cy2) <= 55 and cy1 > 2000 and (b2[2] < b1[0] - 40) and not is_primary_first_pattern:
                 cur_s.setdefault("seq_issues", []).append(
                     "Gestión de foco / Focus Return (WCAG 2.4.3): orden de foco invertido respecto al layout visual (enfoca primero «%s» a la derecha y luego «%s» a la izquierda)"
-                    % ((prev_s.get("label") or prev_s.get("utterance") or "")[:35], (cur_s.get("label") or cur_s.get("utterance") or "")[:35])
+                    % (prev_lbl[:35], cur_lbl[:35])
                 )
 
 
