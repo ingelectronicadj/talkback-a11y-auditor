@@ -114,15 +114,22 @@ DOM_EXTRACT_JS = r"""
         if (val && val.entries && Object.keys(val.entries).length > 30) {
           entries = val.entries;
           dbUsed = dbName;
+          let bundleText = '';
+          try {
+            const scUrls = Array.from(document.querySelectorAll('script[src]')).map(s => s.src).filter(u => /vendors|main|chunk|bundle/i.test(u));
+            const parts = await Promise.all(scUrls.slice(0, 6).map(u => fetch(u).then(r => r.text()).catch(() => '')));
+            bundleText = parts.join('\n');
+          } catch (e) {}
           const langLow = (val.language || '').toLowerCase();
           const englishKeys = [];
           const uninterpolatedKeys = [];
           const emptyKeys = [];
           const styleOrTypoKeys = [];
           for (const [k, rawV] of Object.entries(entries)) {
+            if (bundleText && !bundleText.includes(k)) continue;
             const v = String(rawV || '');
             if (!v.trim()) {
-              emptyKeys.push({ key: k, value: '', note: 'Key vacía en diccionario i18n (provoca enlaces/textos sin etiqueta)' });
+              emptyKeys.push({ key: k, value: '', note: 'Key vacía en diccionario i18n referenciada en el bundle actual' });
               continue;
             }
             if (/\{([A-Z][A-Z0-9_\s]{2,25}|\d{2,}\.\d{2,})\}|\{[A-Za-z0-9_]+\]|\[[A-Za-z0-9_]+\}/.test(v)) {
