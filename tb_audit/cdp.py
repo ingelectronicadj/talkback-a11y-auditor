@@ -241,7 +241,11 @@ DOM_EXTRACT_JS = r"""
       label = ariaLabelledby.split(/\s+/).map(rid => document.getElementById(rid)?.textContent?.trim() || '').join(' ').trim();
     }
     if (!label) {
-      label = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+      const clone = el.cloneNode(true);
+      if (clone.querySelectorAll) {
+        clone.querySelectorAll('[aria-hidden="true"]').forEach(n => n.remove());
+      }
+      label = (clone.innerText || clone.textContent || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
     }
     if (!label && tag !== 'svg' && tag !== 'img' && tag !== 'input' && !ariaLive && !nestedSpanAria) continue;
     let sel = tag;

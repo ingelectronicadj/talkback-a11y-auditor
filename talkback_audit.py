@@ -480,6 +480,9 @@ def navigate_to_view(adb_client, cfg, view_spec, out_dir=None):
         except Exception as e:
             print("      [view] aviso refresh SSO: %s" % e)
     pkg = cfg.get("app_pkg") or ""
+    if pkg and view_spec.get("relaunch"):
+        adb_client.run(["shell", "am", "force-stop", pkg], check=False)
+        time.sleep(1.0)
     act = view_spec.get("start_activity") or ""
     tap_xy = view_spec.get("entry_tap")
     entry_text = (view_spec.get("entry_text") or "").strip()
@@ -649,6 +652,7 @@ def main():
         help="coreUserId para autenticación SSO opcional si difiere de --user",
     )
     ap.add_argument("--login", action="store_true", help="ejecuta el login SSO opcional antes de auditar")
+    ap.add_argument("--relaunch", action="store_true", help="ejecuta am force-stop sobre la app antes de auditar para forzar la descarga del último bundle híbrido")
     ap.add_argument(
         "--refresh",
         action="store_true",
@@ -806,6 +810,10 @@ def main():
         except Exception as e:
             print("      ERROR refresh: %s" % e)
 
+    if getattr(args, "relaunch", False) and cfg.get("app_pkg"):
+        print("      [relaunch] deteniendo proceso previo de %s para forzar descarga de bundle fresco..." % cfg["app_pkg"])
+        adb_client.run(["shell", "am", "force-stop", cfg["app_pkg"]], check=False)
+        time.sleep(1.2)
     if args.login:
         print("[0/4] Login SSO...")
         try:

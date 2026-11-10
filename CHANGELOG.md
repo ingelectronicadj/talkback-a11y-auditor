@@ -2,6 +2,16 @@
 
 Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibilidad con TalkBack se registran en este archivo siguiendo [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.10.2] - 2026-11-10
+
+### Añadido
+- **Flag `--relaunch` y soporte de `"relaunch": true` por vista (`talkback_audit.py`)**: ejecuta `adb shell am force-stop <app_pkg>` antes de abrir la aplicación para forzar la descarga del último bundle híbrido recién publicado en el CDN.
+- **Helper `adb_client.input_text(text, clear=False)` (`tb_audit/adb_client.py`)**: escapa de forma segura caracteres especiales del shell de Android (`&`, `%`, espacios, `;`, `|`, paréntesis y comillas) y permite limpiar el campo antes de escribir contraseñas complejas.
+
+### Corregido
+- **Resiliencia de `dump_nodes()` ante `TimeoutExpired` de `uiautomator` (`tb_audit/adb_client.py`)**: cuando una vista tiene animaciones continuas (spinners/carruseles), reintenta una vez con `uiautomator dump --compressed` (timeout 8s) y si persiste continúa con CDP/OCR sin abortar la corrida.
+- **Exclusión de descendientes `aria-hidden="true"` al calcular el nombre accesible en `DOM_EXTRACT_JS` (`tb_audit/cdp.py`) y refinamiento de `TB-CURR-001` (`tb_audit/rules.py`)**: evita concatenar el texto visual oculto (`<span aria-hidden="true">$ ...</span>`) junto al `<span data-testid="screen-reader">... pesos argentinos</span>` y no reporta `$` ambiguo cuando la cadena ya incluye `"pesos"` o `"dólares"`.
+
 ## [0.10.1] - 2026-11-06
 
 ### Añadido

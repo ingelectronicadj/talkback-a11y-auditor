@@ -215,10 +215,41 @@ class AdbClient:
     def tap(self, x, y):
         self.run(["shell", "input", "tap", str(x), str(y)])
 
+    def input_text(self, text, clear=False, max_del=32):
+        """Escribe texto en el campo enfocado escapando caracteres especiales del shell de Android (&, %, espacios)."""
+        if clear:
+            self.run(["shell", "input", "keyevent", "123"], check=False)
+            for _ in range(max_del):
+                self.run(["shell", "input", "keyevent", "67"], check=False)
+        s = str(text or "").replace(" ", "%s")
+        # Enviar en segmentos seguros cuando hay caracteres especiales de shell (&, %, ;, |, etc.)
+        chunks = re.split(r"([&%;|()<>\"'])", s)
+        for ch in chunks:
+            if not ch:
+                continue
+            if ch in "&;|()<>\"'":
+                self.run(["shell", "input", "text", "\\" + ch], check=False)
+            else:
+                self.run(["shell", "input", "text", ch], check=False)
+
     def dump_nodes(self):
-        """Devuelve lista de nodos accesibles en pantalla (dicts con atributos)."""
-        self.run(["shell", "uiautomator", "dump", "/sdcard/_tb_audit.xml"], check=False)
-        xml = self.run(["shell", "cat", "/sdcard/_tb_audit.xml"], check=False)
+        """Devuelve lista de nodos accesibles en pantalla (dicts con atributos), resiliente a animaciones activas."""
+        try:
+            self.run(["shell", "uiautomator", "dump", "/sdcard/_tb_audit.xml"], check=False)
+        except subprocess.TimeoutExpired:
+            try:
+                subprocess.run(
+                    self._base_cmd() + ["shell", "uiautomator", "dump", "--compressed", "/sdcard/_tb_audit.xml"],
+                    capture_output=True,
+                    timeout=8,
+                )
+            except Exception:
+                print("      [WARN] uiautomator ocupado por animaciones en pantalla; continuando con CDP/OCR")
+                return []
+        try:
+            xml = self.run(["shell", "cat", "/sdcard/_tb_audit.xml"], check=False)
+        except subprocess.TimeoutExpired:
+            return []
         nodes = []
         try:
             root = ET.fromstring(xml)

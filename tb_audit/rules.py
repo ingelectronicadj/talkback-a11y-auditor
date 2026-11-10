@@ -71,7 +71,11 @@ def text_a11y_issues(text, expected_locale="es"):
         return issues
     exp_en = (expected_locale or "").lower().startswith("en")
     without_usd = re.sub(r"US\$\s*", "", text)
-    if "$" in without_usd and not exp_en:
+    if (
+        "$" in without_usd
+        and not exp_en
+        and not re.search(r"\b(pesos?|d[oó]lares)\b", text.lower())
+    ):
         issues.append(
             "Moneda (WCAG 1.3.1): el símbolo '$' sin desambiguar se sintetiza como 'dólares' en TTS español aunque represente pesos ARS"
         )
