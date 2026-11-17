@@ -133,20 +133,31 @@ def run_manual(adb_client, ocr_bin, out_dir, args):
                         print("      finalizado por comando 'q'")
                         break
                     time.sleep(0.6)
+            tmp = os.path.join(out_dir, "img", "_poll.png")
             try:
-                w, h, px = adb_client.screencap_raw()
+                adb_client.screencap_png(tmp)
             except Exception:
                 time.sleep(0.5)
                 continue
-            box = find_focus_box(w, h, px)
-            bar_y = find_caption_bar(w, h, px)
-            tmp = os.path.join(out_dir, "img", "_poll.png")
-            adb_client.screencap_png(tmp)
             info = (
-                ocr_step_info(ocr_bin, tmp, bar_y)
+                ocr_step_info(ocr_bin, tmp, None)
                 if ocr_bin
                 else {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
             )
+            if info.get("meta_sig") is not None:
+                w, h = info.get("meta_size") or adb_client.get_screen_size()
+                box = info.get("meta_box")
+                bar_y = info.get("meta_bar")
+                cur_screen = info.get("meta_sig")
+            else:
+                try:
+                    w, h, px = adb_client.screencap_raw()
+                except Exception:
+                    time.sleep(0.5)
+                    continue
+                box = find_focus_box(w, h, px)
+                bar_y = find_caption_bar(w, h, px)
+                cur_screen = screen_sig(w, h, px)
             utt = info["utterance"]
             sig = (box, utt, info["is_skeleton"], info["page_title"])
             if sig == last_sig:
@@ -159,7 +170,6 @@ def run_manual(adb_client, ocr_bin, out_dir, args):
                 node = match_node(box, last_nodes)
                 lbl = effective_label(node, last_nodes) if node else ""
                 in_overlay = bool(box and bar_y and (box[1] + box[3]) / 2 / h > bar_y[0])
-                cur_screen = screen_sig(w, h, px)
                 change = bool(prev_screen and sig_diff(prev_screen, cur_screen) > 35)
                 prev_screen = cur_screen
                 steps.append({
@@ -196,9 +206,9 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
     """Modo automático lineal (swipe = gesto nativo TalkBack vía QEMU event mouse, alt, tab, dpad)."""
     print("      navegando en modo '%s' (máx. %d pasos)..." % (args.mode, args.steps))
     if args.mode == "swipe" and not args.backward:
-        # Inicializar foco determinista tocando el título estático central (672, 225)
-        # (nunca el botón Atrás para no activarlo si ya tenía el foco) y retrocediendo 1 swipe a Atrás.
-        adb_client.emu_explore_touch(672, 225)
+        # Inicializar foco determinista tocando el centro del header (adaptado a la resolucion real del AVD)
+        # y retrocediendo 1 swipe a Atras.
+        adb_client.emu_explore_touch()
         time.sleep(0.9)
         adb_client.emu_swipe(backward=True)
         time.sleep(0.7)
@@ -226,24 +236,27 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
             time.sleep(args.delay)
         adb_client.close_keyboard()
         png = os.path.join(out_dir, "img", "step_%03d.png" % i)
-        try:
-            w, h, px = adb_client.screencap_raw()
-        except Exception:
-            time.sleep(0.5)
+        adb_client.screencap_png(png)
+        info = (
+            ocr_step_info(ocr_bin, png, None)
+            if ocr_bin
+            else {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
+        )
+        if info.get("meta_sig") is not None:
+            w, h = info.get("meta_size") or adb_client.get_screen_size()
+            box = info.get("meta_box")
+            bar_y = info.get("meta_bar")
+            cur_screen = info.get("meta_sig")
+        else:
             try:
                 w, h, px = adb_client.screencap_raw()
             except Exception:
                 w = h = 0
                 px = b""
-        adb_client.screencap_png(png)
-        box = find_focus_box(w, h, px) if px else None
-        bar_y = find_caption_bar(w, h, px) if px else None
-        in_overlay = bool(box and bar_y and (box[1] + box[3]) / 2 / h > bar_y[0])
-        info = (
-            ocr_step_info(ocr_bin, png, bar_y)
-            if ocr_bin
-            else {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
-        )
+            box = find_focus_box(w, h, px) if px else None
+            bar_y = find_caption_bar(w, h, px) if px else None
+            cur_screen = screen_sig(w, h, px) if px else None
+        in_overlay = bool(box and bar_y and h and (box[1] + box[3]) / 2 / h > bar_y[0])
         utt = info["utterance"]
         # Si TalkBack quedó leyendo el hint secundario "Tocar dos veces para activar" o "Mostrando Teclado",
         # enviamos un pulso adicional para desatascar el foco de campos <input>.
@@ -256,6 +269,10 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
             adb_client.close_keyboard()
             adb_client.screencap_png(png)
             info = ocr_step_info(ocr_bin, png, bar_y) if ocr_bin else info
+            if info.get("meta_sig") is not None:
+                box = info.get("meta_box")
+                bar_y = info.get("meta_bar")
+                cur_screen = info.get("meta_sig")
             utt = info["utterance"]
         if i > 5 and re.search(
             r"no next focusable item|no hay m[aá]s elemento enfocable|no hay ning[uú]n elemento siguiente|no hay elementos siguientes",
@@ -298,8 +315,7 @@ def run_automated(adb_client, ocr_bin, out_dir, nodes0, args, dom_snapshot=None)
         if utt:
             seen_utts.add(utt)
         change = False
-        if px:
-            cur_screen = screen_sig(w, h, px)
+        if cur_screen:
             change = bool(prev_screen and sig_diff(prev_screen, cur_screen) > 35)
             prev_screen = cur_screen
         steps.append({
@@ -422,35 +438,71 @@ def run_self_test():
         assert meta["w3c_url"].startswith("https://www.w3.org/WAI/WCAG22/Understanding/")
     assert any("Moneda" in x for x in text_a11y_issues("$ 11.415.305,40"))
     assert not any("Moneda" in x for x in text_a11y_issues("US$ 82.119,30"))
-    sample_steps = [
-        {
-            "i": 1, "png": "img/step_001.png", "node": None,
-            "utterance": "Siguiente", "raw_caption": "Siguiente",
-            "page_title": "Transferencias", "is_skeleton": False,
-            "box": (100, 200, 300, 260), "in_overlay": False, "label": "Siguiente",
-            "screen_change": False,
-        },
-        {
-            "i": 2, "png": "img/step_002.png", "node": None,
-            "utterance": "", "raw_caption": "TalkBack menu. Button",
-            "page_title": "Elegí con qué cuenta querés operar",
-            "is_skeleton": True, "box": None, "in_overlay": True, "label": "",
-            "screen_change": True,
-        },
-        {
-            "i": 3, "png": "img/step_003.png", "node": None,
-            "utterance": "1 replaced 0 · Siguiente", "raw_caption": "1 replaced 0 · Siguiente",
-            "page_title": "Transferencias", "is_skeleton": False,
-            "box": None, "in_overlay": False, "label": "", "screen_change": True,
-        },
-    ]
+    sample_node = {
+        "text": "",
+        "desc": "",
+        "cls": "android.widget.ImageButton",
+        "rid": "id/btn_icon",
+        "clickable": True,
+        "focusable": True,
+        "checked": "false",
+        "bounds": (10, 10, 40, 40),
+        "pkg": "com.example.app",
+    }
+    n_iss = node_issues(sample_node, expected_locale="es")
+    assert any("1.1.1" in x for x in n_iss) and any("2.5.8" in x for x in n_iss), "Fallo node_issues con expected_locale"
+
+    def _write_min_png(path, rgb=(30, 41, 59)):
+        import struct
+        import zlib
+
+        w_p, h_p = 360, 640
+        row_b = b"\x00" + bytes(rgb) * w_p
+        raw = row_b * h_p
+
+        def _chunk(tag, data):
+            return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n"
+            + _chunk(b"IHDR", struct.pack("!IIBBBBB", w_p, h_p, 8, 2, 0, 0, 0))
+            + _chunk(b"IDAT", zlib.compress(raw, 1))
+            + _chunk(b"IEND", b"")
+        )
+        with open(path, "wb") as fp:
+            fp.write(png_bytes)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         os.makedirs(os.path.join(tmpdir, "img"), exist_ok=True)
+        for idx_p, col in ((1, (20, 30, 48)), (2, (45, 22, 30)), (3, (25, 45, 35))):
+            _write_min_png(os.path.join(tmpdir, "img", "step_%03d.png" % idx_p), col)
+        sample_steps = [
+            {
+                "i": 1, "png": os.path.join(tmpdir, "img", "step_001.png"), "node": sample_node,
+                "utterance": "Siguiente", "raw_caption": "Siguiente",
+                "page_title": "Transferencias", "is_skeleton": False,
+                "box": (100, 200, 300, 260), "in_overlay": False, "label": "Siguiente",
+                "screen_change": False,
+            },
+            {
+                "i": 2, "png": os.path.join(tmpdir, "img", "step_002.png"), "node": None,
+                "utterance": "", "raw_caption": "TalkBack menu. Button",
+                "page_title": "Elegí con qué cuenta querés operar",
+                "is_skeleton": True, "box": None, "in_overlay": True, "label": "",
+                "screen_change": True,
+            },
+            {
+                "i": 3, "png": os.path.join(tmpdir, "img", "step_003.png"), "node": None,
+                "utterance": "1 replaced 0 · Siguiente", "raw_caption": "1 replaced 0 · Siguiente",
+                "page_title": "Transferencias", "is_skeleton": False,
+                "box": None, "in_overlay": False, "label": "", "screen_change": True,
+            },
+        ]
         sample_probes = [
             {
                 "type": "loading_probe", "network": "Slow 3G",
                 "skeleton_detected": True, "loading_announced": False,
-                "screenshots": ["step_001.png"],
+                "screenshots": ["step_001.png", "step_002.png"],
                 "announcements": [{"selector": "screen-reader", "text": "\u200b", "codepoints": ["U+200B"]}],
             },
             {
@@ -459,14 +511,53 @@ def run_self_test():
                 "potential_issue": 'Grid padding cells announce "12x empty day" via aria-label (WCAG 4.1.2)',
             },
         ]
-        out_html = build_report(sample_steps, [], set(), tmpdir, "self-test", probes=sample_probes)
+        sample_dom = {
+            "url": "https://app.local/#/drawer",
+            "lang": "es",
+            "elements": [
+                {
+                    "tag": "div",
+                    "selector": 'div[role="region"]',
+                    "role": "region",
+                    "tabindex": "0",
+                    "unlabelledScrollRegion": 'div[role="region"][tabindex="0"]',
+                    "html": '<div role="region" tabindex="0">Scroll</div>',
+                }
+            ],
+        }
+        out_html = build_report(
+            sample_steps, [sample_node], set(), tmpdir, "self-test", dom_snapshot=sample_dom, probes=sample_probes
+        )
         content = open(out_html, encoding="utf-8").read()
         assert "TB-SKEL-001" in content, "Falta detección TB-SKEL-001 en self-test"
         assert "TB-FOCUS-001" in content, "Falta detección TB-FOCUS-001 en self-test"
         assert "TB-STATUS-001" in content, "Falta detección TB-STATUS-001 desde loading_probe"
         assert "TB-NAME-001" in content, "Falta detección TB-NAME-001 desde probe_control"
         assert "sec-probes" in content, "Falta sección sec-probes en report.html"
-    print("Self-test OK (v%s): 86 criterios WCAG 2.2, %d reglas TB-* y generador HTML verificados." % (
+        assert "copyJiraDraft" in content, "Falta botón Copiar borrador Jira en report.html"
+        if sys.platform == "darwin":
+            vid_files = [f for f in os.listdir(os.path.join(tmpdir, "video")) if f.endswith(".mp4")]
+            assert len(vid_files) >= 1, "No se generaron clips .mp4 en macOS durante self-test"
+            from tb_audit.video import build_diff_report
+
+            after_dir = os.path.join(tmpdir, "after_run")
+            os.makedirs(os.path.join(after_dir, "img"), exist_ok=True)
+            _write_min_png(os.path.join(after_dir, "img", "step_001.png"), (20, 60, 40))
+            build_report(
+                [
+                    {
+                        "i": 1, "png": os.path.join(after_dir, "img", "step_001.png"), "node": None,
+                        "utterance": "Siguiente. Botón", "raw_caption": "Siguiente. Botón",
+                        "page_title": "Transferencias", "is_skeleton": False,
+                        "box": (100, 200, 300, 260), "in_overlay": False, "label": "Siguiente",
+                        "screen_change": False,
+                    }
+                ],
+                [], set(), after_dir, "self-test-after", enable_clips=False,
+            )
+            diff_html, diff_mp4 = build_diff_report(tmpdir, after_dir)
+            assert os.path.isfile(diff_html) and diff_mp4 and os.path.isfile(diff_mp4), "Fallo build_diff_report"
+    print("Self-test OK (v%s): 86 criterios WCAG 2.2, %d reglas TB-*, generador HTML, clips MP4 y diff Before/After verificados." % (
         VERSION, len(WCAG_CATALOG)
     ))
 
@@ -689,6 +780,22 @@ def main():
         help="genera index.html maestro y empaqueta los reportes de la suite en un archivo .zip autocontenido",
     )
     ap.add_argument(
+        "--record",
+        action="store_true",
+        help="graba video en vivo del emulador (adb shell screenrecord -> video/live_walk.mp4) durante el barrido",
+    )
+    ap.add_argument(
+        "--no-clips",
+        action="store_true",
+        help="desactiva la generacion automatica de clips .mp4 cortos por hallazgo",
+    )
+    ap.add_argument(
+        "--diff",
+        nargs=2,
+        metavar=("BEFORE_DIR", "AFTER_DIR"),
+        help="compara dos corridas Android TalkBack (Antes vs Despues) y genera diff_report.html + clip .mp4 lado a lado",
+    )
+    ap.add_argument(
         "--compare",
         nargs=2,
         metavar=("IOS_DIR", "ANDROID_DIR"),
@@ -719,6 +826,15 @@ def main():
         print("[Bundle CDN] Checksum:      %s" % pkg.get("checksum_zip", ""))
         return
 
+    if args.diff:
+        from tb_audit.video import build_diff_report
+
+        d_html, d_mp4 = build_diff_report(args.diff[0], args.diff[1], out_dir=args.out)
+        print("Reporte de regresion Before/After: %s" % d_html)
+        if d_mp4:
+            print("Clip comparativo Before/After:     %s" % d_mp4)
+        return
+
     if args.compare:
         out_cmp = build_comparison_suite(args.compare[0], args.compare[1], out_path=args.out)
         print("Reporte comparativo: %s" % out_cmp)
@@ -738,7 +854,16 @@ def main():
         print("Regenerando reporte desde %s ..." % args.rebuild)
         ocr_bin = None if args.no_ocr else ensure_ocr_binary()
         v_info = {"title": args.view_title} if args.view_title else None
-        print("Reporte: %s" % rebuild_report(ocr_bin, args.rebuild, view_info=v_info, cfg=cfg))
+        print(
+            "Reporte: %s"
+            % rebuild_report(
+                ocr_bin,
+                args.rebuild,
+                view_info=v_info,
+                cfg=cfg,
+                enable_clips=not getattr(args, "no_clips", False),
+            )
+        )
         return
 
     if args.doctor:
@@ -907,6 +1032,10 @@ def main():
 
         ka_interval = cfg["keep_alive_sec"] if args.keep_alive is None else args.keep_alive
         ka_stop = start_keep_alive(cfg, ka_interval) if ka_interval and ka_interval > 0 else None
+        live_video_rel = None
+        if getattr(args, "record", False):
+            print("      [record] iniciando grabacion en vivo del emulador (screenrecord)...")
+            adb_client.start_screenrecord()
         try:
             if args.manual:
                 if ka_stop:
@@ -920,6 +1049,12 @@ def main():
                     adb_client, ocr_bin, cur_out, nodes0, args, dom_snapshot=dom_snapshot
                 )
         finally:
+            if getattr(args, "record", False):
+                live_dst = os.path.join(cur_out, "video", "live_walk.mp4")
+                saved_live = adb_client.stop_screenrecord(live_dst)
+                if saved_live:
+                    live_video_rel = os.path.relpath(saved_live, cur_out)
+                    print("      [record] video en vivo guardado -> %s" % saved_live)
             if ka_stop:
                 ka_stop.set()
             if args.net_delay and args.net_delay > 0:
@@ -963,8 +1098,17 @@ def main():
         }
         tree = [n for n in (last_nodes or nodes0) if is_a11y_relevant(n)]
         path = build_report(
-            steps, tree, visited, cur_out, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg,
+            steps,
+            tree,
+            visited,
+            cur_out,
+            meta,
+            dom_snapshot=dom_snapshot,
+            view_info=view_info,
+            cfg=cfg,
             probes=view_probes,
+            enable_clips=not getattr(args, "no_clips", False),
+            live_video_rel=live_video_rel,
         )
         completed_dirs.append(cur_out)
         print("Reporte: %s" % path)

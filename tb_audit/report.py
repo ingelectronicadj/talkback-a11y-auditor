@@ -97,10 +97,20 @@ h2{font-size:14px;margin:30px 0 12px;text-transform:uppercase;letter-spacing:.05
 .jira-chip{display:inline-block;background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;text-decoration:none;
            font-size:10px;font-weight:700;padding:1px 7px;border-radius:4px}
 .jira-chip:hover{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
-.step-links{display:flex;gap:5px;flex-wrap:wrap}
+.step-links{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 .step-chip{display:inline-block;background:#f1f5f9;border:1px solid #cbd5e1;color:#0f172a;text-decoration:none;
            font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px}
 .step-chip:hover{background:#0f172a;color:#fff;border-color:#0f172a}
+.jira-draft-btn{appearance:none;background:#0f172a;color:#fff;border:1px solid #0f172a;border-radius:5px;
+                font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer;margin-left:auto}
+.jira-draft-btn:hover{background:#0284c7;border-color:#0284c7}
+.clip-box{margin:10px 0 8px;padding:10px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;color:#e2e8f0}
+.clip-hdr{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;font-size:11px;font-weight:600;color:#7dd3fc}
+.clip-dl{color:#fff;background:#0284c7;text-decoration:none;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:4px}
+.clip-dl:hover{background:#0369a1}
+.clip-box video{width:100%;max-height:420px;border-radius:6px;background:#020617;display:block}
+.live-vid-wrap{background:#fff;border:1px solid #e2e8f0;border-left:4px solid #0284c7;border-radius:8px;padding:14px 16px;margin-bottom:18px}
+.live-vid-wrap video{width:100%;max-height:480px;border-radius:6px;background:#0f172a;margin-top:8px}
 .filmstrip{display:flex;gap:8px;overflow-x:auto;padding:10px 4px 12px;background:#fff;border:1px solid #e2e8f0;
            border-radius:8px;margin-bottom:16px}
 .fnode{flex:0 0 135px;border:1px solid #cbd5e1;border-radius:6px;padding:7px 8px;text-decoration:none;color:#1e2933;
@@ -410,7 +420,19 @@ def save_steps_json(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None
     return p
 
 
-def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, view_info=None, cfg=None, probes=None):
+def build_report(
+    steps,
+    tree_nodes,
+    visited,
+    out_dir,
+    meta,
+    dom_snapshot=None,
+    view_info=None,
+    cfg=None,
+    probes=None,
+    enable_clips=True,
+    live_video_rel=None,
+):
     if probes is None and isinstance(dom_snapshot, dict) and dom_snapshot.get("probes"):
         probes = dom_snapshot.get("probes")
     tree_nodes = [n for n in tree_nodes if is_a11y_relevant(n)]
@@ -514,6 +536,38 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                 target_st.setdefault("seq_issues", [])
                 if msg not in target_st["seq_issues"]:
                     target_st["seq_issues"].append(msg)
+            usr_reg = (el.get("unlabelledScrollRegion") or "").strip()
+            if usr_reg and steps:
+                msg_reg = (
+                    "Nombre accesible (WCAG 4.1.2): contenedor scrollable role=\"region\" tabindex=\"0\" (%s) carece de aria-label o aria-labelledby asociado al titulo"
+                    % usr_reg[:65]
+                )
+                steps[0].setdefault("seq_issues", [])
+                if msg_reg not in steps[0]["seq_issues"]:
+                    steps[0]["seq_issues"].append(msg_reg)
+            bdl = (el.get("brokenDialogLabelledby") or "").strip()
+            if bdl and steps:
+                msg_bdl = (
+                    "Nombre accesible (WCAG 4.1.2): dialogo modal (%s) referencia aria-labelledby=«%s» inexistente, vacio o dentro de subarbol inert/aria-hidden"
+                    % (el.get("selector") or "div[role=dialog]", bdl[:55])
+                )
+                steps[0].setdefault("seq_issues", [])
+                if msg_bdl not in steps[0]["seq_issues"]:
+                    steps[0]["seq_issues"].append(msg_bdl)
+            usc = (el.get("unhiddenSelectorContent") or "").strip()
+            if usc and steps:
+                msg_usc = (
+                    "Contenedor fusionado (WCAG 1.3.2 / 4.1.2): contenedor visual sin aria-hidden (%s) expone texto estatico duplicado o tapa el input radio/checkbox en TalkBack"
+                    % usc[:75]
+                )
+                target_st = steps[-1]
+                for st_cand in steps:
+                    if el.get("id") and el.get("id") in ((st_cand.get("dom") or {}).get("html") or ""):
+                        target_st = st_cand
+                        break
+                target_st.setdefault("seq_issues", [])
+                if msg_usc not in target_st["seq_issues"]:
+                    target_st["seq_issues"].append(msg_usc)
     resolved_view = _resolve_view_info(steps, dom_snapshot, view_info)
     save_steps_json(
         steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=resolved_view, probes=probes
@@ -759,6 +813,16 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
             if rid:
                 rule_to_jkeys.setdefault(rid, []).append(jb["key"])
 
+    rule_clips, probe_clips = ({}, {})
+    if enable_clips and (by_rule or probes):
+        from .video import generate_finding_clips
+
+        rule_clips, probe_clips = generate_finding_clips(steps, by_rule, out_dir, probes=probes)
+
+    if not live_video_rel and os.path.isfile(os.path.join(out_dir, "video", "live_walk.mp4")):
+        live_video_rel = os.path.join("video", "live_walk.mp4")
+
+    step_by_num = {s["i"]: s for s in steps}
     exec_cards = []
     for rk in WCAG_ORDER:
         items = by_rule.get(rk)
@@ -770,6 +834,52 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
         card_cls = "crit" if sev_cls == "crit" else ("info" if sev_cls == "low" else "")
         step_nums = sorted({i for i, _ in items})
         chips = "".join('<a class="step-chip" href="#step-%d">Paso %d</a>' % (n, n) for n in step_nums)
+
+        # Construir borrador Jira de 6 secciones para copiar con un clic
+        dom_snip_draft = ""
+        for sn in step_nums:
+            st_obj = step_by_num.get(sn) or {}
+            raw_h = ((st_obj.get("dom") or {}).get("html") or "").strip()
+            if raw_h:
+                dom_snip_draft = _clean_and_pretty_html(raw_h)
+                break
+        step_bullets = []
+        for sn in step_nums[:5]:
+            st_obj = step_by_num.get(sn) or {}
+            u_str = (st_obj.get("utterance") or st_obj.get("label") or "(sin anuncio)").strip()
+            step_bullets.append("- Step %d: TalkBack announces \"%s\"." % (sn, u_str))
+        clip_rel = rule_clips.get(rk, "")
+        clip_note = ("\n- Video evidence clip: %s" % clip_rel) if clip_rel else ""
+        draft_lines = [
+            "In view '%s', an accessibility defect (%s) was detected during Android TalkBack linear navigation."
+            % (resolved_view.get("title") or "Android View", cat["rule_id"]),
+            (("\n\n```html\n%s\n```" % dom_snip_draft) if dom_snip_draft else ""),
+            "\n\n---\n\n## Current result\n" + "\n".join(step_bullets) + clip_note,
+            "\n\n## Expected result\n- " + cat["sr_expected"],
+            "\n\n## How to reproduce\n1. Enable Android TalkBack and open '%s'.\n2. Swipe right linearly to step(s) %s.\n3. Observe the TalkBack announcement."
+            % (resolved_view.get("title") or "the target view", ", ".join(str(x) for x in step_nums[:6])),
+            "\n\n## Impact\n%s - %s" % ("High" if sev_cls == "crit" else "Medium", wmeta["user_impact"]),
+            "\n\n## WCAG criteria applicable\n- WCAG 2.2 %s · %s %s"
+            % (wmeta["level"], wmeta["criterion"], wmeta["name_en"]),
+        ]
+        jira_draft_str = "".join(draft_lines)
+        draft_btn_html = (
+            '<button class="jira-draft-btn" type="button" data-draft="%s" onclick="copyJiraDraft(this)">'
+            "Copiar borrador Jira (6 secciones)</button>" % html.escape(jira_draft_str, quote=True)
+        )
+
+        clip_html = ""
+        if clip_rel:
+            abs_clip = os.path.join(out_dir, clip_rel)
+            kb_sz = (os.path.getsize(abs_clip) // 1024) if os.path.isfile(abs_clip) else 0
+            clip_html = (
+                '<div class="clip-box">'
+                '<div class="clip-hdr"><span>Clip corto para Jira (%d KB)</span>'
+                '<a class="clip-dl" href="%s" download>Descargar MP4</a></div>'
+                '<video controls preload="metadata" src="%s"></video>'
+                "</div>" % (kb_sz, html.escape(clip_rel), html.escape(clip_rel))
+            )
+
         jkeys = rule_to_jkeys.get(cat["rule_id"], [])
         jira_badges = "".join(
             '<a class="jira-chip" href="%s/browse/%s" target="_blank" rel="noopener">%s</a>'
@@ -822,8 +932,8 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
             '<div class="sr-box good"><b>Comportamiento esperado (WCAG 2.2)</b>%s</div>'
             "</div>"
             '<div class="rule-rec"><b>Recomendación técnica:</b> %s</div>'
-            '%s'
-            '<div class="step-links">%s</div></div>'
+            '%s%s'
+            '<div class="step-links">%s%s</div></div>'
             % (
                 card_cls,
                 html.escape(title_str),
@@ -844,7 +954,9 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
                 _format_inline_tokens(cat["sr_expected"]),
                 _format_inline_tokens(cat["rec"]),
                 rem_html,
+                clip_html,
                 chips,
+                draft_btn_html,
             )
         )
     exec_html = "\n".join(exec_cards) or '<div class="rule-card info">Sin hallazgos registrados en esta corrida.</div>'
@@ -1004,14 +1116,23 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
     probes_section_html = ""
     if probes:
         probe_cards = []
-        for pr in probes:
+        for p_idx, pr in enumerate(probes):
             ptype = pr.get("type") or "probe"
             shots = pr.get("screenshots") or []
+            p_clip = probe_clips.get(p_idx, "")
+            p_clip_html = (
+                '<div class="clip-box"><div class="clip-hdr"><span>Clip sonda dinamica</span>'
+                '<a class="clip-dl" href="%s" download>Descargar MP4</a></div>'
+                '<video controls preload="metadata" src="%s"></video></div>'
+                % (html.escape(p_clip), html.escape(p_clip))
+                if p_clip
+                else ""
+            )
             shots_html = " ".join(
                 '<a href="img/%s" target="_blank" rel="noopener"><img src="img/%s" style="max-width:260px;border:1px solid #334155;border-radius:6px;margin:4px" alt="%s"></a>'
                 % (html.escape(s), html.escape(s), html.escape(s))
                 for s in shots
-            )
+            ) + p_clip_html
             if ptype == "loading_probe":
                 ann_rows = "".join(
                     "<tr><td><code>%s</code></td><td>%s</td><td class='muted'>%s</td></tr>"
@@ -1227,6 +1348,18 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
         else '<div class="stat"><b>%d <span class="stat-sep">/</span> %d</b><span class="stat-lbl">repetidos / overlay</span></div>'
         % (n_dups, n_noise)
     )
+    live_video_html = ""
+    if live_video_rel and os.path.isfile(os.path.join(out_dir, live_video_rel)):
+        l_kb = os.path.getsize(os.path.join(out_dir, live_video_rel)) // 1024
+        live_video_html = (
+            '<div class="live-vid-wrap">'
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
+            '<b>Grabacion en vivo de la sesion TalkBack (%d KB)</b>'
+            '<a class="clip-dl" href="%s" download>Descargar grabacion completa (.mp4)</a></div>'
+            '<video controls preload="metadata" src="%s"></video></div>'
+            % (l_kb, html.escape(live_video_rel), html.escape(live_video_rel))
+        )
+
     doc = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>%(tab_title)s - TalkBack Audit v%(ver)s</title><style>%(css)s</style></head><body id="top">
@@ -1257,6 +1390,7 @@ def build_report(steps, tree_nodes, visited, out_dir, meta, dom_snapshot=None, v
   </div>
 </header>
 <main>
+%(live_video_html)s
 <h2 id="sec-resumen"><span>1. Resumen ejecutivo por criterio WCAG (con opciones de remediación)</span><span>%(n_rules)d criterios afectados</span></h2>
 <div class="exec-grid">%(exec_html)s</div>
 
@@ -1309,6 +1443,15 @@ function copyDomCode(btn){
   var orig=btn.textContent;
   btn.textContent='Copiado';
   setTimeout(function(){btn.textContent=orig;},1400);
+ }
+}
+function copyJiraDraft(btn){
+ var txt=btn.getAttribute('data-draft')||'';
+ if(navigator.clipboard&&txt){
+  navigator.clipboard.writeText(txt);
+  var orig=btn.textContent;
+  btn.textContent='Borrador copiado';
+  setTimeout(function(){btn.textContent=orig;},1500);
  }
 }
 var btop=document.getElementById('btn-top');
@@ -1374,6 +1517,7 @@ qInput.addEventListener('input',applyFilter);
         "n_dups": n_dups,
         "n_noise": n_noise,
         "n_jira_active": n_jira_active,
+        "live_video_html": live_video_html,
         "exec_html": exec_html,
         "jira_section_html": jira_section_html,
         "headings_section_html": headings_section_html,
@@ -1390,7 +1534,7 @@ qInput.addEventListener('input',applyFilter);
     return path
 
 
-def rebuild_report(ocr_bin, out_dir, view_info=None, cfg=None):
+def rebuild_report(ocr_bin, out_dir, view_info=None, cfg=None, enable_clips=True):
     """Regenera report.html de una corrida previa: usa steps.json si existe y re-ejecuta OCR + heurísticas."""
     json_path = os.path.join(out_dir, "steps.json")
     saved_by_i = {}
@@ -1465,7 +1609,16 @@ def rebuild_report(ocr_bin, out_dir, view_info=None, cfg=None):
         % (len(steps), datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
     )
     return build_report(
-        steps, tree_nodes, visited, out_dir, meta, dom_snapshot=dom_snapshot, view_info=view_info, cfg=cfg, probes=saved_probes
+        steps,
+        tree_nodes,
+        visited,
+        out_dir,
+        meta,
+        dom_snapshot=dom_snapshot,
+        view_info=view_info,
+        cfg=cfg,
+        probes=saved_probes,
+        enable_clips=enable_clips,
     )
 
 
@@ -1605,6 +1758,12 @@ def build_suite_index(out_dirs, suite_dir=None, zip_path=None, suite_title=None)
                     for fn in sorted(os.listdir(img_src)):
                         if fn.endswith(".png"):
                             shutil.copy2(os.path.join(img_src, fn), os.path.join(dst_d, "img", fn))
+                vid_src = os.path.join(d, "video")
+                if os.path.isdir(vid_src):
+                    os.makedirs(os.path.join(dst_d, "video"), exist_ok=True)
+                    for fn in sorted(os.listdir(vid_src)):
+                        if fn.endswith(".mp4"):
+                            shutil.copy2(os.path.join(vid_src, fn), os.path.join(dst_d, "video", fn))
                 old_rel = os.path.relpath(os.path.join(d, "report.html"), suite_dir)
                 new_rel = "%s/report.html" % sub_name
                 idx_doc = idx_doc.replace('href="%s"' % html.escape(old_rel), 'href="%s"' % html.escape(new_rel))

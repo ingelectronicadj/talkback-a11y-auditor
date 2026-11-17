@@ -52,6 +52,9 @@ class AdbClient:
     def __init__(self, device="emulator-5554", timeout=25):
         self.device = device
         self.timeout = timeout
+        self._screen_size = None
+        self._rec_proc = None
+        self._rec_remote = None
         sdk_root = find_sdk_root()
         self.adb_bin = sdk_bin(sdk_root, "platform-tools", "adb")
         self.emulator_bin = sdk_bin(sdk_root, "emulator", "emulator")
@@ -340,11 +343,84 @@ class AdbClient:
         m = re.search(r"emulator-(\d+)", self.device or "")
         return int(m.group(1)) if m else 5554
 
-    def emu_swipe(self, backward=False, y=1400, steps=12, dur=0.10):
+    def get_screen_size(self):
+        """Obtiene y cachea la resolucion fisica (w, h) del emulador via `wm size` (fallback 1344x2992)."""
+        if self._screen_size:
+            return self._screen_size
+        try:
+            out = self.run(["shell", "wm", "size"], check=False)
+            m = re.search(r"(\d+)\s*x\s*(\d+)", out)
+            if m:
+                self._screen_size = (int(m.group(1)), int(m.group(2)))
+                return self._screen_size
+        except Exception:
+            pass
+        self._screen_size = (1344, 2992)
+        return self._screen_size
+
+    def start_screenrecord(self, remote_path="/sdcard/_tb_live.mp4", bit_rate=3000000, time_limit=180):
+        """Inicia `adb shell screenrecord` en segundo plano para capturar video en vivo del emulador."""
+        self.stop_screenrecord(local_path=None)
+        self.run(["shell", "rm", "-f", remote_path], check=False)
+        sw, sh = self.get_screen_size()
+        scale = min(1.0, 1280.0 / max(1, sh))
+        vw = max(360, int(sw * scale) // 2 * 2)
+        vh = max(640, int(sh * scale) // 2 * 2)
+        cmd = [
+            self.adb_bin,
+            "-s",
+            self.device,
+            "shell",
+            "screenrecord",
+            "--size",
+            "%dx%d" % (vw, vh),
+            "--bit-rate",
+            str(int(bit_rate)),
+            "--time-limit",
+            str(int(min(180, max(5, time_limit)))),
+            remote_path,
+        ]
+        self._rec_remote = remote_path
+        self._rec_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+
+    def stop_screenrecord(self, local_path, remote_path=None):
+        """Detiene limpiamente `screenrecord` con SIGINT (para escribir el atomo moov del MP4) y descarga el archivo."""
+        rem = remote_path or self._rec_remote or "/sdcard/_tb_live.mp4"
+        if self._rec_proc is not None:
+            try:
+                self.run(["shell", "pkill", "-SIGINT", "screenrecord"], check=False)
+            except Exception:
+                pass
+            try:
+                self._rec_proc.wait(timeout=4)
+            except Exception:
+                try:
+                    self._rec_proc.terminate()
+                except Exception:
+                    pass
+            self._rec_proc = None
+            time.sleep(0.8)
+        if not local_path:
+            return None
+        os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+        try:
+            self.run(["pull", rem, local_path], check=False, timeout=30)
+            self.run(["shell", "rm", "-f", rem], check=False)
+            if os.path.isfile(local_path) and os.path.getsize(local_path) > 1024:
+                return local_path
+        except Exception:
+            pass
+        return None
+
+    def emu_swipe(self, backward=False, y=None, steps=12, dur=0.10):
         """Inyecta un gesto de swipe horizontal real por la consola QEMU del emulador
-        (`event mouse <x> <y> 0 1`), que TalkBack procesa como gesto nativo de
-        navegación lineal (swipe derecha = siguiente, swipe izquierda = anterior)."""
-        x1, x2 = (1100, 250) if backward else (250, 1100)
+        (`event mouse <x> <y> 0 1`), escalado a la resolucion real del AVD."""
+        sw, sh = self.get_screen_size()
+        if y is None:
+            y = int(sh * 0.47)
+        x_lo, x_hi = int(sw * 0.185), int(sw * 0.815)
+        x1, x2 = (x_hi, x_lo) if backward else (x_lo, x_hi)
         token_path = os.path.expanduser("~/.emulator_console_auth_token")
         token = open(token_path).read().strip() if os.path.exists(token_path) else ""
         s = socket.create_connection(("127.0.0.1", self._emu_port()), timeout=5)
@@ -363,10 +439,15 @@ class AdbClient:
         finally:
             s.close()
 
-    def emu_explore_touch(self, x, y):
+    def emu_explore_touch(self, x=None, y=None):
         """Inyecta un gesto 'Explore by touch' (tocar y deslizar 24px durante ~320ms)
         por la consola QEMU del emulador, moviendo el foco de TalkBack al elemento en
-        (x, y) SIN activarlo."""
+        (x, y) SIN activarlo. Si x/y son None usa el centro del header (0.50*W, 0.075*H)."""
+        sw, sh = self.get_screen_size()
+        if x is None:
+            x = int(sw * 0.50)
+        if y is None:
+            y = int(sh * 0.075)
         token_path = os.path.expanduser("~/.emulator_console_auth_token")
         token = open(token_path).read().strip() if os.path.exists(token_path) else ""
         s = socket.create_connection(("127.0.0.1", self._emu_port()), timeout=5)
@@ -384,8 +465,13 @@ class AdbClient:
         finally:
             s.close()
 
-    def emu_double_tap(self, x=672, y=1400):
+    def emu_double_tap(self, x=None, y=None):
         """Inyecta un doble tap real por la consola QEMU del emulador (activar elemento enfocado en TalkBack)."""
+        sw, sh = self.get_screen_size()
+        if x is None:
+            x = int(sw * 0.50)
+        if y is None:
+            y = int(sh * 0.47)
         token_path = os.path.expanduser("~/.emulator_console_auth_token")
         token = open(token_path).read().strip() if os.path.exists(token_path) else ""
         s = socket.create_connection(("127.0.0.1", self._emu_port()), timeout=5)

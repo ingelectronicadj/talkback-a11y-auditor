@@ -181,7 +181,7 @@ def ensure_ocr_binary():
         return None
     src = os.path.join(SCRIPT_DIR, "tb_ocr.swift")
     binpath = os.path.join(SCRIPT_DIR, "tb_ocr")
-    if os.path.exists(binpath):
+    if os.path.exists(binpath) and (not os.path.exists(src) or os.path.getmtime(binpath) >= os.path.getmtime(src)):
         return [binpath]
     try:
         subprocess.run(
@@ -217,10 +217,29 @@ def ocr_step_info(ocr_cmd, png_path, bar_y=None):
         ).stdout
     except Exception:
         return {"utterance": "", "raw_caption": "", "page_title": "", "is_skeleton": False}
-    y_lo, y_hi = bar_y if bar_y else (0.82, 0.97)
+    meta_box = None
+    meta_bar = None
+    meta_sig = None
+    meta_size = None
     parsed = []
     tb_hdr_y = None
     for ln in out.splitlines():
+        if ln.startswith("#META\t"):
+            for part in ln.split("\t")[1:]:
+                if part.startswith("size=") and "," in part[5:]:
+                    sp = part[5:].split(",")
+                    meta_size = (int(sp[0]), int(sp[1]))
+                elif part.startswith("box=") and part[4:]:
+                    bp = part[4:].split(",")
+                    if len(bp) == 4:
+                        meta_box = (int(bp[0]), int(bp[1]), int(bp[2]), int(bp[3]))
+                elif part.startswith("bar=") and part[4:]:
+                    br = part[4:].split(",")
+                    if len(br) == 2:
+                        meta_bar = (float(br[0]), float(br[1]))
+                elif part.startswith("sig=") and part[4:]:
+                    meta_sig = tuple(int(v) for v in part[4:].split(",") if v)
+            continue
         m = re.match(r"([\d.]+),([\d.]+),([\d.]+),([\d.]+)\t(.*)", ln)
         if not m:
             continue
@@ -235,6 +254,8 @@ def ocr_step_info(ocr_cmd, png_path, bar_y=None):
         parsed.append((x, y, w, h, cy, txt))
         if 0.82 <= cy <= 0.90 and x <= 0.14 and txt.lower().startswith("talkback"):
             tb_hdr_y = cy
+    eff_bar = bar_y or meta_bar
+    y_lo, y_hi = eff_bar if eff_bar else (0.82, 0.97)
 
     # El texto hablado real en la barra de TalkBack siempre aparece alineado a la
     # izquierda (x <= 0.14) y debajo del encabezado "TalkBack" (tb_hdr_y + 0.012 .. + 0.076).
@@ -298,4 +319,8 @@ def ocr_step_info(ocr_cmd, png_path, bar_y=None):
         "raw_caption": raw_caption,
         "page_title": page_title,
         "is_skeleton": is_skeleton,
+        "meta_box": meta_box,
+        "meta_bar": meta_bar,
+        "meta_sig": meta_sig,
+        "meta_size": meta_size,
     }

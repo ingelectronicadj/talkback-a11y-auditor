@@ -6,8 +6,9 @@ __pycache__/
 venv/
 env/
 
-# Binario OCR compilado localmente (se recompila con swiftc en macOS)
+# Binarios nativos compilados localmente (se recompilan con swiftc en macOS)
 tb_ocr
+tb_video
 *.dSYM/
 
 # Configuración local y secretos (nunca versionar)

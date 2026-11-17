@@ -184,7 +184,7 @@ def text_a11y_issues(text, expected_locale="es"):
     return issues
 
 
-def node_issues(node):
+def node_issues(node, expected_locale="es"):
     issues = []
     text_vis = (node.get("text") or "").strip()
     desc = (node.get("desc") or "").strip()
@@ -318,9 +318,25 @@ def analyze_sequence_issues(steps):
         cur_s = steps[idx]
         u1 = (prev_s.get("utterance") or "").strip().lower()
         u2 = (cur_s.get("utterance") or "").strip().lower()
-        if u1 and "radio" in u2 and u1 in u2 and "radio" not in u1:
+        is_radio_u2 = bool(re.search(r"\b(radio|bot[oó]n de opci[oó]n|en el grupo,\s*opci[oó]n)\b", u2))
+        is_radio_u1 = bool(re.search(r"\b(radio|bot[oó]n de opci[oó]n|en el grupo,\s*opci[oó]n)\b", u1))
+        u1_core = re.sub(r"^[€$£\s]+", "", u1).strip()
+        if u1_core and is_radio_u2 and not is_radio_u1 and u1_core in u2:
+            if idx >= 2:
+                prev2_u = (steps[idx - 2].get("utterance") or "").strip().lower()
+                prev2_core = re.sub(r"^[€$£\s]+", "", prev2_u).strip()
+                if prev2_core and not re.search(r"\b(radio|bot[oó]n de opci[oó]n)\b", prev2_u) and prev2_core in u2:
+                    cur_s.setdefault("seq_issues", []).append(
+                        "Contenedor fusionado (WCAG 1.3.2 / 4.1.2): tarjeta selectora genera 3 paradas separadas en TalkBack («%s» -> «%s» -> «%s»)"
+                        % (
+                            (steps[idx - 2].get("utterance") or "")[:24],
+                            (prev_s.get("utterance") or "")[:24],
+                            (cur_s.get("utterance") or "")[:45],
+                        )
+                    )
+                    continue
             cur_s.setdefault("seq_issues", []).append(
-                "Contenedor fusionado (WCAG 1.3.2 / 4.1.2): píldora de selección rápida genera 2 paradas separadas en TalkBack (primero texto estático «%s» y luego el input «%s»)"
+                "Contenedor fusionado (WCAG 1.3.2 / 4.1.2): píldora o tarjeta de selección genera paradas duplicadas en TalkBack (primero texto estático «%s» y luego el input «%s»)"
                 % ((prev_s.get("utterance") or "")[:30], (cur_s.get("utterance") or "")[:55])
             )
         b1 = prev_s.get("box")

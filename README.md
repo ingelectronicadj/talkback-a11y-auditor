@@ -1,4 +1,4 @@
-# TalkBack Audit (`v0.6.0`)
+# TalkBack Audit (`v0.11.0`)
 
 Herramienta de auditoría lineal de accesibilidad para **Android TalkBack** sobre emuladores Android - equivalente a **NVDA Speech Viewer / Accessibility Insights** para aplicaciones **nativas (Android Views), Jetpack Compose e híbridas (WebView)**.
 
@@ -110,8 +110,11 @@ python3 talkback_audit.py --stop-talkback --setup-only
 | `--no-setup` | Omite el reinicio de TalkBack cuando ya está activo en la pantalla objetivo | `False` |
 | `--stop-talkback` | Desactiva TalkBack al terminar | `False` |
 | `--test-modals` | En modo automático, abre y cierra modales/drawers detectados para validar `Focus Return` (`TB-FOCUS-001`) | `False` |
-| `--pack [ZIP_FILE]` | Genera portada maestra `index.html` y empaqueta la suite de reportes en un archivo `.zip` autocontenido | - |
-| `--rebuild DIR` | Reconstruye `report.html` a partir de `steps.json` y las capturas de `DIR/img/` | - |
+| `--record` | Graba vídeo en vivo del emulador (`adb shell screenrecord` -> `video/live_walk.mp4`) durante el barrido | `False` |
+| `--no-clips` | Desactiva la síntesis automática de clips `.mp4` cortos por hallazgo en `video/` | `False` |
+| `--diff BEFORE AFTER` | Compara dos corridas de TalkBack y genera `diff_report.html` + vídeo comparativo Antes/Después `.mp4` | - |
+| `--pack [ZIP_FILE]` | Genera portada maestra `index.html` y empaqueta la suite de reportes (con `img/` y `video/`) en un `.zip` autocontenido | - |
+| `--rebuild DIR` | Reconstruye `report.html` y los clips `.mp4` a partir de `steps.json` y las capturas de `DIR/img/` | - |
 
 ---
 
@@ -120,17 +123,19 @@ python3 talkback_audit.py --stop-talkback --setup-only
 ```text
 .
 ├── talkback_audit.py          # Entrypoint CLI, orquestador de barrido y modo --self-test
-├── tb_ocr.swift               # OCR nativo sobre Vision.framework con filtro de píxeles (macOS)
+├── tb_ocr.swift               # OCR nativo sobre Vision.framework + extraccion de foco/barra (macOS)
+├── tb_video.swift             # Codificador H.264 (.mp4) nativo para clips de evidencia y Before/After (macOS)
 ├── tb_ocr.ps1                 # OCR nativo sobre Windows.Media.Ocr con el mismo filtro (Windows)
 ├── config.example.json        # Plantilla de configuración (copiar a profiles/<app>.local.json)
 ├── profiles/                  # Perfiles locales por app/entorno (*.local.json ignorados en git)
 ├── reportes/                  # Salidas organizadas por aplicación/proyecto (ignoradas en git)
 ├── CHANGELOG.md               # Historial de cambios por versión
 ├── tb_audit/
-│   ├── __init__.py            # Versión del paquete (VERSION = "0.8.0")
+│   ├── __init__.py            # Versión del paquete (VERSION = "0.11.0")
 │   ├── config.py              # Carga de configuración jerárquica (defaults -> profiles/*.local.json -> CLI)
-│   ├── adb_client.py          # Cliente ADB, arranque de AVD, locale, preflight y gestos QEMU (emu_swipe)
+│   ├── adb_client.py          # Cliente ADB, arranque de AVD, screenrecord, locale y gestos QEMU adaptativos
 │   ├── vision.py              # Detección de foco verde, barra de subtítulos, skeletons y OCR
+│   ├── video.py               # Orquestador de clips .mp4 por hallazgo, sondas y reporte --diff Before/After
 │   ├── cdp.py                 # Inspector WebView DOM / ARIA e IndexedDB vía Chrome DevTools Protocol
 │   ├── wcag_catalog.py        # Taxonomía oficial WCAG 2.2 (86 criterios) y catálogo de 16 reglas TB-*
 │   ├── rules.py               # Motor de heurísticas por nodo, texto, secuencia, encabezados y omitidos
