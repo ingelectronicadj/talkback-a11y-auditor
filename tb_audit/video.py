@@ -15,7 +15,7 @@ def ensure_video_binary():
     """Compila bajo demanda tb_video.swift en macOS (AVFoundation, sin ffmpeg externo)."""
     if sys.platform != "darwin":
         return None
-    src = os.path.join(SCRIPT_DIR, "tb_video.swift")
+    src = os.path.join(SCRIPT_DIR, "tb_video_avf.swift")
     binpath = os.path.join(SCRIPT_DIR, "tb_video")
     if not os.path.exists(src):
         return None

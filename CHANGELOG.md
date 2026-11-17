@@ -5,7 +5,7 @@ Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibil
 ## [0.11.0] - 2026-11-17
 
 ### Añadido
-- **Evidencias cortas en video `.mp4` listas para Jira (`tb_video.swift`, `tb_audit/video.py`, `tb_audit/report.py`)**:
+- **Evidencias cortas en video `.mp4` listas para Jira (`tb_video_avf.swift`, `tb_audit/video.py`, `tb_audit/report.py`)**:
   - Por cada regla `TB-*` con hallazgos (y sondas dinamicas con capturas), genera automaticamente un clip H.264 `.mp4` corto (4 a 11 s) en `video/<rule_id>_steps_<A>_<B>.mp4` usando `AVAssetWriter` nativo de macOS sin requerir `ffmpeg` externo, con banda HUD de paso, anuncio TalkBack y barra de progreso, incrustado en cada tarjeta ejecutiva de `report.html` con boton de descarga directa (desactivable con `--no-clips`).
   - Nueva opcion `--record`: inicia `adb shell screenrecord` escalado durante el barrido y descarga `video/live_walk.mp4` al finalizar la vista (incluido automaticamente al empaquetar suites con `--pack`).
   - Nuevo modo `--diff BEFORE_DIR AFTER_DIR`: compara dos corridas Android TalkBack (reglas resueltas, persistentes y nuevas) y genera `diff_report.html` junto con el clip comparativo lado a lado `video/before_after_comparison.mp4` para cierre de tickets.
@@ -15,7 +15,7 @@ Todas las mejoras relevantes de la herramienta de auditoría lineal de accesibil
 
 ### Corregido
 - **Firma de `node_issues(node, expected_locale="es")` (`tb_audit/rules.py`)**: corrige el `TypeError` al evaluar nodos nativos de `uiautomator` con `expected_locale` explicito y lo cubre en `--self-test`.
-- **Captura unificada en una sola llamada `screencap -p` y coordenadas adaptativas de AVD (`tb_ocr.swift`, `tb_audit/vision.py`, `tb_audit/adb_client.py`, `talkback_audit.py`)**: `tb_ocr` extrae en la misma pasada `FOCUS_BOX`, `CAPTION_BAR` y `SCREEN_SIG` evitando transferir ~16 MB crudos adicionales por paso en macOS, y `emu_swipe` / `emu_explore_touch` / `emu_double_tap` escalan sus coordenadas al `wm size` real del emulador.
+- **Captura unificada en una sola llamada `screencap -p` y coordenadas adaptativas de AVD (`tb_ocr_vision.swift`, `tb_audit/vision.py`, `tb_audit/adb_client.py`, `talkback_audit.py`)**: `tb_ocr` extrae en la misma pasada `FOCUS_BOX`, `CAPTION_BAR` y `SCREEN_SIG` evitando transferir ~16 MB crudos adicionales por paso en macOS, y `emu_swipe` / `emu_explore_touch` / `emu_double_tap` escalan sus coordenadas al `wm size` real del emulador.
 
 ## [0.10.2] - 2026-11-10
 

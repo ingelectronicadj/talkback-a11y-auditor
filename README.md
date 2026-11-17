@@ -123,8 +123,8 @@ python3 talkback_audit.py --stop-talkback --setup-only
 ```text
 .
 ├── talkback_audit.py          # Entrypoint CLI, orquestador de barrido y modo --self-test
-├── tb_ocr.swift               # OCR nativo sobre Vision.framework + extraccion de foco/barra (macOS)
-├── tb_video.swift             # Codificador H.264 (.mp4) nativo para clips de evidencia y Before/After (macOS)
+├── tb_ocr_vision.swift        # OCR nativo sobre Vision.framework + extraccion de foco/barra (macOS)
+├── tb_video_avf.swift         # Codificador H.264 (.mp4) nativo para clips de evidencia y Before/After (macOS)
 ├── tb_ocr.ps1                 # OCR nativo sobre Windows.Media.Ocr con el mismo filtro (Windows)
 ├── config.example.json        # Plantilla de configuración (copiar a profiles/<app>.local.json)
 ├── profiles/                  # Perfiles locales por app/entorno (*.local.json ignorados en git)
